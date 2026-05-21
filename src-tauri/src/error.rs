@@ -40,6 +40,6 @@ mod tests {
     fn from_std_io_error_maps_to_io_variant() {
         let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "x");
         let app_err: AppError = io_err.into();
-        matches!(app_err, AppError::Io(_));
+        assert!(matches!(app_err, AppError::Io(_)));
     }
 }

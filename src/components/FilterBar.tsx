@@ -1,0 +1,140 @@
+// 筛选栏：level toggle + scope（字段+模式+模式选择） + 关键词 + 时间区间
+// 输入有 150ms debounce，对外通过 useSession 的 patchSpec 暴露
+
+import { useEffect, useMemo, useState } from 'react';
+import { useSession } from '../state/session';
+import type { LogLevel, MatchMode } from '../types/log';
+
+const LEVELS: LogLevel[] = ['trace', 'debug', 'info', 'warn', 'error', 'unknown'];
+const LEVEL_COLOR: Record<LogLevel, string> = {
+  trace: 'bg-slate-200 text-slate-700',
+  debug: 'bg-cyan-200 text-cyan-800',
+  info: 'bg-blue-200 text-blue-800',
+  warn: 'bg-amber-200 text-amber-800',
+  error: 'bg-red-200 text-red-800',
+  unknown: 'bg-slate-100 text-slate-500',
+};
+
+export function FilterBar() {
+  const { spec, patchSpec, metadata } = useSession();
+
+  // 本地输入态（debounce 后再写 store）
+  const [keyword, setKeyword] = useState(spec.text_search ?? '');
+  const [scopeField, setScopeField] = useState(spec.scope_filter?.field_name ?? 'scope');
+  const [scopePattern, setScopePattern] = useState(spec.scope_filter?.pattern ?? '');
+  const [scopeMode, setScopeMode] = useState<MatchMode>(spec.scope_filter?.mode ?? 'glob');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+
+  // debounce 关键词
+  useEffect(() => {
+    const t = setTimeout(() => patchSpec({ text_search: keyword || null }), 150);
+    return () => clearTimeout(t);
+  }, [keyword, patchSpec]);
+
+  // debounce scope 三联
+  useEffect(() => {
+    const t = setTimeout(() => {
+      patchSpec({
+        scope_filter: scopePattern
+          ? { field_name: scopeField, pattern: scopePattern, mode: scopeMode }
+          : null,
+      });
+    }, 150);
+    return () => clearTimeout(t);
+  }, [scopeField, scopePattern, scopeMode, patchSpec]);
+
+  // debounce 时间
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const tr: [string, string] | null = from && to ? [from, to] : null;
+      patchSpec({ time_range: tr });
+    }, 150);
+    return () => clearTimeout(t);
+  }, [from, to, patchSpec]);
+
+  const fieldOptions = useMemo(() => {
+    // "scope" + 当前文件出现过的 fields 名（MVP 简化：只列 "scope"）
+    return ['scope'];
+  }, [metadata]);
+
+  const toggleLevel = (lv: LogLevel) => {
+    const current = new Set(spec.levels ?? LEVELS);
+    if (current.has(lv)) current.delete(lv); else current.add(lv);
+    patchSpec({ levels: Array.from(current) });
+  };
+
+  const activeLevels = new Set(spec.levels ?? LEVELS);
+
+  return (
+    <div className="p-3 border-b bg-white space-y-2">
+      <div className="flex items-center gap-2 text-sm">
+        <span className="text-slate-500">级别：</span>
+        {LEVELS.map((lv) => (
+          <button
+            key={lv}
+            onClick={() => toggleLevel(lv)}
+            className={[
+              'px-2 py-0.5 rounded text-xs uppercase tracking-wide',
+              activeLevels.has(lv) ? LEVEL_COLOR[lv] : 'bg-slate-50 text-slate-400 line-through',
+            ].join(' ')}
+          >
+            {lv}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex items-center gap-2 text-sm">
+        <span className="text-slate-500">Scope：</span>
+        <select
+          value={scopeField}
+          onChange={(e) => setScopeField(e.target.value)}
+          className="border rounded px-1 py-0.5 text-xs"
+        >
+          {fieldOptions.map((f) => <option key={f} value={f}>{f}</option>)}
+        </select>
+        <input
+          value={scopePattern}
+          onChange={(e) => setScopePattern(e.target.value)}
+          placeholder="模式（如 auth.* 或 user-service）"
+          className="border rounded px-2 py-0.5 text-xs flex-1 max-w-xs"
+        />
+        <div className="flex border rounded overflow-hidden text-xs">
+          {(['exact', 'glob', 'regex'] as const).map((m) => (
+            <button
+              key={m}
+              onClick={() => setScopeMode(m)}
+              className={['px-2 py-0.5', scopeMode === m ? 'bg-slate-700 text-white' : 'bg-white text-slate-600'].join(' ')}
+            >
+              {m}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2 text-sm">
+        <span className="text-slate-500">关键词：</span>
+        <input
+          value={keyword}
+          onChange={(e) => setKeyword(e.target.value)}
+          placeholder="在 message / 原始行中搜索"
+          className="border rounded px-2 py-0.5 text-xs flex-1 max-w-md"
+        />
+        <span className="text-slate-500 ml-2">时间：</span>
+        <input
+          type="datetime-local"
+          value={from}
+          onChange={(e) => setFrom(e.target.value ? new Date(e.target.value).toISOString() : '')}
+          className="border rounded px-1 py-0.5 text-xs"
+        />
+        <span className="text-slate-400">~</span>
+        <input
+          type="datetime-local"
+          value={to}
+          onChange={(e) => setTo(e.target.value ? new Date(e.target.value).toISOString() : '')}
+          className="border rounded px-1 py-0.5 text-xs"
+        />
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,5 @@
+{"time":"2026-05-22T09:00:00Z","level":"info","logger":"auth","msg":"user logged in","user_id":42}
+{"time":"2026-05-22T09:00:05Z","level":"warn","logger":"db","msg":"slow query 1.2s","query":"SELECT *"}
+{"time":"2026-05-22T09:00:10Z","level":"error","logger":"auth","msg":"token invalid","user_id":42}
+{"time":"2026-05-22T09:00:15Z","level":"info","logger":"http","msg":"GET /api/users 200"}
+{"time":"2026-05-22T09:00:20Z","level":"debug","logger":"db.pool","msg":"acquire conn"}

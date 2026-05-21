@@ -1,8 +1,14 @@
 import { OpenFileButton } from './components/OpenFileButton';
+import { FilterBar } from './components/FilterBar';
+import { StatsPanel } from './components/StatsPanel';
+import { LogList } from './components/LogList';
 import { useSession } from './state/session';
+import { useAutoQuery } from './hooks/useAutoQuery';
 
 export default function App() {
   const { metadata, loading, error } = useSession();
+  useAutoQuery();
+
   return (
     <div className="h-screen flex flex-col bg-slate-50 text-slate-900">
       <header className="flex items-center gap-3 px-4 py-2 border-b bg-white">
@@ -15,17 +21,13 @@ export default function App() {
       {error && (
         <div className="px-4 py-2 text-sm text-red-700 bg-red-50 border-b border-red-200">{error}</div>
       )}
-      {loading && (
-        <div className="px-4 py-2 text-sm text-slate-600">加载中…</div>
+      {metadata && <FilterBar />}
+      {metadata && <StatsPanel />}
+      {metadata ? <LogList /> : (
+        <main className="flex-1 flex items-center justify-center text-slate-400">
+          {loading ? '加载中…' : '点击"打开日志文件"开始'}
+        </main>
       )}
-      <main className="flex-1 overflow-hidden">
-        {!metadata && !loading && (
-          <div className="h-full flex items-center justify-center text-slate-400">
-            点击"打开日志文件"开始
-          </div>
-        )}
-        {/* FilterBar / StatsPanel / LogList 在后续 Phase 加入 */}
-      </main>
     </div>
   );
 }

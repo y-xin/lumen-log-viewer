@@ -1,51 +1,31 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
-import "./App.css";
+import { OpenFileButton } from './components/OpenFileButton';
+import { useSession } from './state/session';
 
-function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
-
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
-  }
-
+export default function App() {
+  const { metadata, loading, error } = useSession();
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
-
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
-    </main>
+    <div className="h-screen flex flex-col bg-slate-50 text-slate-900">
+      <header className="flex items-center gap-3 px-4 py-2 border-b bg-white">
+        <h1 className="text-base font-semibold">Log Viewer</h1>
+        <OpenFileButton />
+        <div className="ml-auto text-xs text-slate-500">
+          {metadata ? `${metadata.path} · ${metadata.total} 行 · 模板 ${metadata.template_id}` : '未打开文件'}
+        </div>
+      </header>
+      {error && (
+        <div className="px-4 py-2 text-sm text-red-700 bg-red-50 border-b border-red-200">{error}</div>
+      )}
+      {loading && (
+        <div className="px-4 py-2 text-sm text-slate-600">加载中…</div>
+      )}
+      <main className="flex-1 overflow-hidden">
+        {!metadata && !loading && (
+          <div className="h-full flex items-center justify-center text-slate-400">
+            点击"打开日志文件"开始
+          </div>
+        )}
+        {/* FilterBar / StatsPanel / LogList 在后续 Phase 加入 */}
+      </main>
+    </div>
   );
 }
-
-export default App;

@@ -2,7 +2,7 @@
 
 桌面 GUI 日志查看与分析工具（Tauri + React + TypeScript）。
 
-## 当前状态：Plan 2b + Export + Style v3 + Saved Filters + Shortcuts 已完成
+## 当前状态：Plan 2b + Export + Style v3 + Saved Filters + Shortcuts + Detail Nav 已完成
 
 **最新视觉规范**：统一 28px 控件高度、Linear/Notion 风格、StatsPanel 瘦身、level 计数下沉到 footer。
 
@@ -21,6 +21,7 @@
 - **导出筛选结果**：CSV / JSON Lines / JSON Array 三种格式，FilterBar 右侧 📥 菜单触发
 - **保存筛选器**：按文件路径命名保存常用 level/scope/keyword 组合，FilterBar 右侧 📌 菜单一键调出 / 重命名 / 删除
 - **键盘快捷键**：⌘O 打开 / ⌘R 刷新 / ⌘F 聚焦搜索 / ⌘K 清空筛选 / ⌘T 跟踪 / ⌘E 导出 / ⌘S 筛选器 / ? 帮助 / Esc 关闭
+- **跨页详情导航 + 关键词高亮**：详情抽屉 ↑/↓ 跨全部 matched entries 跳转 + 显示 "第 X / 共 Y 条匹配"；列表行 / Message / Raw 区按 text_search 命中黄底高亮
 
 ## 开发
 
@@ -32,7 +33,7 @@ npm run tauri dev
 ## 测试
 
 ```bash
-cd src-tauri && cargo test     # 110 lib + 9 integration tests
+cd src-tauri && cargo test     # 115 lib + 9 integration tests
 npm test                       # 前端 vitest
 ```
 
@@ -43,10 +44,9 @@ npm test                       # 前端 vitest
 ## 已知 MVP 限制
 
 - 实时跟踪的"增量过滤"不重新跑 spec filter — 新条目无条件追加（切换 spec 会重新查询修正）
-- 详情抽屉的 ↑/↓ 仅在当前已加载的 200 条页面内导航
 - 文件轮转检测仅 macOS / Linux（依赖 inode）
 - macOS 上 FSEvents 监听是父目录而非单文件（解决 file-granularity 不可靠的 known issue）
 
 ## 未实现
 
-- 跨页详情导航
+- （暂无 — README 待办已全部交付）

@@ -12,12 +12,14 @@ import { useSession } from './state/session';
 import { useAutoQuery } from './hooks/useAutoQuery';
 import { useTailFollow } from './hooks/useTailFollow';
 import { useFileDrop } from './hooks/useFileDrop';
+import { useAutoOpenRecent } from './hooks/useAutoOpenRecent';
 
 export default function App() {
   const { metadata, loading, error } = useSession();
   const [showManager, setShowManager] = useState(false);
   useAutoQuery();
   useTailFollow();
+  useAutoOpenRecent();
   const isDragging = useFileDrop();
 
   return (

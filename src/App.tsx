@@ -7,6 +7,7 @@ import { TemplateMenu } from './components/TemplateMenu';
 import { TemplateManagerDialog } from './components/TemplateManagerDialog';
 import { DetailDrawer } from './components/DetailDrawer';
 import { FollowToggle } from './components/FollowToggle';
+import { RotationDialog } from './components/RotationDialog';
 import { useSession } from './state/session';
 import { useAutoQuery } from './hooks/useAutoQuery';
 import { useTailFollow } from './hooks/useTailFollow';
@@ -41,6 +42,7 @@ export default function App() {
 
       {showManager && <TemplateManagerDialog onClose={() => setShowManager(false)} />}
       <DetailDrawer />
+      <RotationDialog />
     </div>
   );
 }

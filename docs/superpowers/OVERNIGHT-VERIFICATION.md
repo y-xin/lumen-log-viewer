@@ -39,6 +39,49 @@
 - [ ] follow OFF 后 spec 切换仍正常
 - [ ] 高频追加（>10 条/s）不掉条 — debounce 250ms 内合并
 
+### H. 错误边界 (commit `fd0297b`)
+
+根级 React `ErrorBoundary` 包 App。崩溃后显示红框错误卡片 + 错误消息 + "尝试恢复 / 重新加载" 双按钮。dev 模式额外展开组件 stack trace。生产模式只给 reload。
+
+**验收**
+- [ ] 在 React devtools / 故意制造异常 → 显示卡片而非整页白屏
+- [ ] "尝试恢复" 重置 boundary state；"重新加载" 走 `location.reload()`
+
+### G. 列显隐 toggle (commit `a1995b2`)
+
+LogList 表头最右侧 ⚙ 按钮，下拉勾选行号/时间/级别/Scope 四列；勾去后该列连同 resizer 都不渲染。Message 列固定显示（核心信息）。状态写 `prefs.json` 新字段 `column_visibility`。
+
+**验收**
+- [ ] 隐藏 Scope 列 → 重启 → Scope 列仍隐藏
+- [ ] 展开 row 时缩进自动对齐到 message 列（不被隐藏列影响）
+
+### E. 日志字号调整 (commit `a71ea17`)
+
+`⌘=` 放大 / `⌘-` 缩小 / `⌘0` 重置（12px）。范围 10-20px。仅作用于 LogList row + DetailDrawer Message/Raw（toolbar/chip 保持稳定）。行高同比缩放，react-window resetAfterIndex 触发布局重算。持久化到 `prefs.json` 新字段 `font_size`。
+
+**验收**
+- [ ] `⌘=` 三次 → 字号 15px 行高变大；`⌘0` → 回 12
+- [ ] 重启 → 上次保留的字号还原
+- [ ] toolbar 按钮高度不变（28px）
+
+### D. 解析嗅探质量提示 (commit `4112c65`)
+
+`FileMetadata.sniff_kind` 后端写入 `AutoMatch`（≥0.8 置信度）/ `Suggested`（0.4-0.8）/ `NoMatch`（<0.4）。前端 `SniffQualityBanner` 在 FilterBar 上方显示：Suggested 黄条 / NoMatch 红条；用户从顶部 "模板 ▾" 切别的模板（走 reparse）后 banner 消失。
+
+**验收**
+- [ ] 打开格式不规则的 .log（非 6 种内置任一）→ NoMatch 红条
+- [ ] 打开混合格式（部分匹配 50%）→ Suggested 黄条
+- [ ] 手动切个完美匹配的模板 → banner 消失
+
+### I. regex 关键词搜索 (commit `8121984`)
+
+FilterBar 关键词框旁 `.Rx` 按钮切换 substring（默认）/ regex 模式。`QuerySpec.text_search_mode` 字段；后端 `compile_text_regex` 用 `(?i)` 大小写不敏感；非法正则编译失败时静默放行（前端 input 红边框 + tooltip 提示）。
+
+**验收**
+- [ ] 打开 .Rx → 输 `error|warn` → 同时匹配两种 level 词
+- [ ] 输 `[unclosed` → 输入框红边框，结果不变（fallback "无 text filter"）
+- [ ] 关 .Rx → 回 substring，前面输入还原工作
+
 ### C. 列宽持久化 (commit `1e24241`)
 
 文件：`src-tauri/src/prefs/store.rs`、`src-tauri/src/commands.rs`、`src-tauri/src/lib.rs`、`src/api/commands.ts`、`src/components/LogList.tsx`

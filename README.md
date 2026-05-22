@@ -2,7 +2,7 @@
 
 桌面 GUI 日志查看与分析工具（Tauri + React + TypeScript）。
 
-## 当前状态：Plan 2b + Export + Style v3 + Saved Filters + Shortcuts + Detail Nav + Overnight (multiline/follow-fix/col-prefs) 已完成
+## 当前状态：Plan 2b + Export + Style v3 + Saved Filters + Shortcuts + Detail Nav + Overnight (8 features) 已完成
 
 **最新视觉规范**：统一 28px 控件高度、Linear/Notion 风格、StatsPanel 瘦身、level 计数下沉到 footer。
 
@@ -23,7 +23,11 @@
 - **键盘快捷键**：⌘O 打开 / ⌘R 刷新 / ⌘F 聚焦搜索 / ⌘K 清空筛选 / ⌘T 跟踪 / ⌘E 导出 / ⌘S 筛选器 / ? 帮助 / Esc 关闭
 - **跨页详情导航 + 关键词高亮**：详情抽屉 ↑/↓ 跨全部 matched entries 跳转 + 显示 "第 X / 共 Y 条匹配"；列表行 / Message / Raw 区按 text_search 命中黄底高亮
 - **多行 entry 展开/折叠**：stack trace 等多行 entry 在表格里行末显示 `▸ N`，点开看完整 raw（单条上限 10 行，更多在详情抽屉 Raw 区）
-- **列宽持久化**：拖动调整的列宽自动写 prefs.json，下次启动还原
+- **列宽 / 列显隐持久化**：拖动列宽 + 表头 ⚙ 菜单切换列显示，全部写 prefs.json，下次启动还原
+- **日志字号 ⌘+/⌘-/⌘0**：LogList 行 + 详情抽屉 Message/Raw 字号可调（10-20px），行高同比缩放，持久化到 prefs.json
+- **解析嗅探质量提示**：自动嗅探不确定时（confidence < 0.8）顶部黄/红条提示切模板
+- **关键词 regex 模式**：FilterBar 关键词框旁 `.Rx` 切换，正则非法时输入框红边框（不阻塞，后端静默放行）
+- **错误边界**：根级 React ErrorBoundary，崩溃后给 "尝试恢复 / 重新加载" 卡片（dev 模式带 stack trace）
 
 ## 开发
 
@@ -35,7 +39,7 @@ npm run tauri dev
 ## 测试
 
 ```bash
-cd src-tauri && cargo test     # 115 lib + 9 integration tests
+cd src-tauri && cargo test     # 117 lib + 9 integration tests
 npm test                       # 前端 vitest
 ```
 

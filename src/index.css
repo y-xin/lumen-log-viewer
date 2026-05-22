@@ -1,3 +1,22 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* 禁掉 macOS WebView 默认的 overscroll bounce —— 滚到顶/底时整个页面跟着橡皮筋反弹 */
+html, body, #root {
+  overscroll-behavior: none;
+  overflow: hidden;
+  height: 100%;
+}
+
+/* 禁掉文本拖拽选中导致的窗口跟随移动（拖空白处误选 + Tauri 默认 webkit drag）。
+   列表行、抽屉内可选文本由各自组件覆盖（user-select: text） */
+body {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+input, textarea, .selectable, [data-selectable] {
+  user-select: text;
+  -webkit-user-select: text;
+}

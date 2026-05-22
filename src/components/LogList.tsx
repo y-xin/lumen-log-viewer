@@ -1,8 +1,5 @@
 // 虚拟列表：滚动到第 N 页边界时按需 fetch 下一页
-// MVP 简化：仅显示已 fetch 的条目；用 FixedSizeList 表达"占位高度 = total_matched"
-// 增强：跟踪滚动位置；新条目到达时若在底部则自动滚动，否则显示"↓N 条新日志"悬浮按钮
-// 高度：用 ResizeObserver 测量容器实际大小（避免硬编码 innerHeight - 280 在 sparkline
-//       折叠 / 窗口缩放 / 不同 header 高度下算错而切掉底部行）
+// 列：行号 / 时间 / level / scope / message+fields（可拖动调整 4 个边界）
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { FixedSizeList as List, ListChildComponentProps, ListOnScrollProps } from 'react-window';
@@ -13,7 +10,7 @@ import type { LogEntry, LogLevel } from '../types/log';
 const PAGE_SIZE = 200;
 const ROW_HEIGHT = 28;
 const BOTTOM_THRESHOLD = 20;
-const STATUS_BAR_HEIGHT = 28; // 底部"匹配 N 条"行
+const STATUS_BAR_HEIGHT = 28;
 
 const LEVEL_COLOR: Record<LogLevel, string> = {
   error: 'text-red-700',
@@ -24,20 +21,37 @@ const LEVEL_COLOR: Record<LogLevel, string> = {
   unknown: 'text-slate-400',
 };
 
+// 可拖动列：默认宽度 + 最小宽度
+type ColKey = 'line' | 'time' | 'level' | 'scope';
+const DEFAULT_WIDTHS: Record<ColKey, number> = {
+  line: 70,
+  time: 180,
+  level: 56,
+  scope: 160,
+};
+const MIN_WIDTH = 32;
+
+function formatFields(fields: Record<string, string>): string {
+  return Object.entries(fields)
+    .map(([k, v]) => `${k}=${v}`)
+    .join('  ');
+}
+
+function lineLabel(e: LogEntry): string {
+  return e.line_count > 1 ? `${e.line_no}-${e.line_no + e.line_count - 1}` : `${e.line_no}`;
+}
+
 export function LogList() {
   const { spec, result, selectedLineNo, setSelectedLineNo, newEntriesPending, clearNewEntriesPending } = useSession();
-  // 全局条目缓冲：index → entry；空槽未加载
   const [entries, setEntries] = useState<(LogEntry | undefined)[]>([]);
   const pendingPages = useRef<Set<number>>(new Set());
   const seq = useRef(0);
   const listRef = useRef<List | null>(null);
   const atBottomRef = useRef(true);
 
-  // 实际可用高度：用 callback ref + ResizeObserver。
-  // callback ref 比 useRef+useLayoutEffect 更可靠 —— mount/unmount 时同步触发，
-  // 解决"组件 conditional 渲染 + useLayoutEffect 只跑一次"的初始高度为 0 的问题。
+  // ─── 容器高度 ──────────────────────────────────────────
   const [containerHeight, setContainerHeight] = useState<number>(() =>
-    Math.max(0, window.innerHeight - 280) // fallback 初值，避免首帧 0
+    Math.max(0, window.innerHeight - 280)
   );
   const observerRef = useRef<ResizeObserver | null>(null);
   const containerRef = useCallback((node: HTMLDivElement | null) => {
@@ -50,7 +64,6 @@ export function LogList() {
       const h = node.clientHeight;
       if (h > 0) setContainerHeight(h);
     };
-    // 立即测一次；再用 RAF 等浏览器完成布局后再测一次（覆盖 flex 撑开延迟到下一帧的情况）
     measure();
     requestAnimationFrame(measure);
     const ro = new ResizeObserver(measure);
@@ -58,10 +71,30 @@ export function LogList() {
     observerRef.current = ro;
   }, []);
   useEffect(() => () => observerRef.current?.disconnect(), []);
-
   const listH = Math.max(0, containerHeight - STATUS_BAR_HEIGHT);
 
-  // spec 或文件变化时重置 + 注入首页；若用户处于底部，新结果到达后自动滚到末尾
+  // ─── 列宽（可拖动） ────────────────────────────────────
+  const [widths, setWidths] = useState<Record<ColKey, number>>(DEFAULT_WIDTHS);
+  const startResize = (col: ColKey, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    const startW = widths[col];
+    const onMove = (ev: MouseEvent) => {
+      const w = Math.max(MIN_WIDTH, startW + (ev.clientX - startX));
+      setWidths((prev) => ({ ...prev, [col]: w }));
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+    };
+    document.body.style.cursor = 'col-resize';
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
+
+  // ─── 数据加载 ──────────────────────────────────────────
   useEffect(() => {
     seq.current++;
     pendingPages.current.clear();
@@ -107,6 +140,7 @@ export function LogList() {
     clearNewEntriesPending();
   };
 
+  // ─── Row ───────────────────────────────────────────────
   const Row = ({ index, style }: ListChildComponentProps) => {
     const e = entries[index];
     if (!e) {
@@ -115,22 +149,33 @@ export function LogList() {
       return <div style={style} className="px-2 text-slate-300 text-xs flex items-center">…</div>;
     }
     const isSelected = selectedLineNo === e.line_no;
+    const fieldsTxt = formatFields(e.fields);
+    const messageTxt = e.message || e.raw;
+    const combined = fieldsTxt ? `${messageTxt}    ${fieldsTxt}` : messageTxt;
     return (
       <div
         style={style}
         onClick={() => setSelectedLineNo(isSelected ? null : e.line_no)}
         className={[
-          'px-2 text-xs flex items-center gap-3 font-mono border-b border-slate-100 cursor-pointer',
+          'px-2 text-xs flex items-stretch gap-0 font-mono border-b border-slate-100 cursor-pointer',
           isSelected ? 'bg-blue-50' : 'hover:bg-slate-50',
         ].join(' ')}
       >
-        <span className="text-slate-400 w-16 text-right">
-          {e.line_count > 1 ? `#${e.line_no}-${e.line_no + e.line_count - 1}` : `#${e.line_no}`}
+        <span style={{ width: widths.line }} className="flex items-center text-slate-400 text-right justify-end pr-2">
+          {lineLabel(e)}
         </span>
-        <span className="text-slate-500 w-40 truncate">{e.timestamp ?? '-'}</span>
-        <span className={['w-12 uppercase', LEVEL_COLOR[e.level]].join(' ')}>{e.level}</span>
-        <span className="text-slate-600 w-32 truncate">[{e.scope ?? '-'}]</span>
-        <span className="flex-1 truncate">{e.message || e.raw}</span>
+        <span style={{ width: widths.time }} className="flex items-center text-slate-500 truncate px-2">
+          {e.timestamp ?? '-'}
+        </span>
+        <span style={{ width: widths.level }} className={['flex items-center uppercase px-2', LEVEL_COLOR[e.level]].join(' ')}>
+          {e.level}
+        </span>
+        <span style={{ width: widths.scope }} className="flex items-center text-slate-600 truncate px-2">
+          {e.scope ?? '-'}
+        </span>
+        <span className="flex-1 flex items-center truncate px-2" title={combined}>
+          {combined}
+        </span>
       </div>
     );
   };
@@ -138,22 +183,40 @@ export function LogList() {
   if (!result) return null;
   const showFloating = newEntriesPending > 0 && !atBottomRef.current;
 
+  // 表头：与 Row 列宽对齐，列之间放可拖动的 resizer
+  const Header = () => (
+    <div className="flex items-stretch text-xs font-medium text-slate-500 bg-slate-50 border-b border-slate-200 select-none">
+      <div style={{ width: widths.line }} className="flex items-center justify-end pr-2 py-1">行号</div>
+      <Resizer onMouseDown={(e) => startResize('line', e)} />
+      <div style={{ width: widths.time }} className="flex items-center px-2 py-1">时间</div>
+      <Resizer onMouseDown={(e) => startResize('time', e)} />
+      <div style={{ width: widths.level }} className="flex items-center px-2 py-1">级别</div>
+      <Resizer onMouseDown={(e) => startResize('level', e)} />
+      <div style={{ width: widths.scope }} className="flex items-center px-2 py-1">Scope</div>
+      <Resizer onMouseDown={(e) => startResize('scope', e)} />
+      <div className="flex-1 flex items-center px-2 py-1">Message + Fields</div>
+    </div>
+  );
+
   return (
-    <div ref={containerRef} className="flex-1 overflow-hidden relative">
-      <List
-        ref={listRef}
-        height={listH}
-        itemCount={result.total_matched}
-        itemSize={ROW_HEIGHT}
-        width="100%"
-        onScroll={onScroll}
-      >
-        {Row}
-      </List>
+    <div ref={containerRef} className="flex-1 overflow-hidden relative flex flex-col">
+      <Header />
+      <div className="flex-1 overflow-hidden">
+        <List
+          ref={listRef}
+          height={Math.max(0, listH - 28)}      // 减去表头高
+          itemCount={result.total_matched}
+          itemSize={ROW_HEIGHT}
+          width="100%"
+          onScroll={onScroll}
+        >
+          {Row}
+        </List>
+      </div>
       {showFloating && (
         <button
           onClick={jumpToBottom}
-          className="absolute right-6 px-3 py-1.5 bg-blue-600 text-white text-xs rounded-full shadow-lg hover:bg-blue-700"
+          className="absolute right-6 px-3 py-1.5 bg-blue-600 text-white text-xs rounded-full shadow-lg hover:bg-blue-700 z-10"
           style={{ bottom: STATUS_BAR_HEIGHT + 16 }}
         >
           ↓ {newEntriesPending.toLocaleString()} 条新日志
@@ -163,5 +226,16 @@ export function LogList() {
         匹配 {result.total_matched.toLocaleString()} 条
       </div>
     </div>
+  );
+}
+
+function Resizer({ onMouseDown }: { onMouseDown: (e: React.MouseEvent) => void }) {
+  return (
+    <div
+      onMouseDown={onMouseDown}
+      className="w-1 cursor-col-resize bg-transparent hover:bg-blue-400/40 active:bg-blue-500/60"
+      style={{ touchAction: 'none' }}
+      title="拖动调整列宽"
+    />
   );
 }

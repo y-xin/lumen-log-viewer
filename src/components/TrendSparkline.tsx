@@ -37,11 +37,15 @@ function fmtBucket(ts: string): string {
 }
 
 function renderTooltip(props: TooltipContentProps<ValueType, NameType>) {
-  const { active, payload, label } = props;
+  const { active, payload } = props;
   if (!active || !payload || payload.length === 0) return null;
+  // 直接从 payload[0].payload 取原始 bucket_start，不依赖 recharts label
+  // （没有 <XAxis dataKey="bucket_start" /> 时 label 是数组 index，new Date(0) → 1970）
+  const row = payload[0]?.payload as ChartRow | undefined;
+  const ts = row?.bucket_start ?? '';
   return (
     <div className="bg-white border rounded p-2 text-xs shadow">
-      <div className="text-slate-500 mb-1">{fmtBucket(label as string)}</div>
+      <div className="text-slate-500 mb-1">{ts ? fmtBucket(ts) : '-'}</div>
       {payload
         .filter((p) => typeof p.value === 'number' && p.value > 0)
         .map((p) => {

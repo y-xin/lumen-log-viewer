@@ -3,6 +3,7 @@ pub mod json_lines;
 pub mod level;
 pub mod grouping;
 pub mod tail_parser;
+pub mod regex_template;
 
 use crate::model::{FileMetadata, LogEntry, LogLevel};
 use grouping::group_records;

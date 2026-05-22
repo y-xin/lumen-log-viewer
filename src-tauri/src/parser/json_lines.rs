@@ -15,10 +15,17 @@ const SCOPE_KEYS: &[&str] = &["scope", "logger", "module", "name"];
 const MESSAGE_KEYS: &[&str] = &["msg", "message"];
 
 impl ParserTemplate for JsonLinesTemplate {
-    fn id(&self) -> &'static str { "json-lines" }
-    fn name(&self) -> &'static str { "JSON Lines" }
+    fn id(&self) -> &str { "json-lines" }
+    fn name(&self) -> &str { "JSON Lines" }
 
-    fn parse_line(&self, raw: &str) -> Option<PartialEntry> {
+    fn is_record_start(&self, line: &str) -> bool {
+        let t = line.trim();
+        if !t.starts_with('{') { return false; }
+        serde_json::from_str::<Value>(t).map(|v| v.is_object()).unwrap_or(false)
+    }
+
+    fn parse_record(&self, lines: &[String]) -> Option<PartialEntry> {
+        let raw = lines.first()?;
         let v: Value = serde_json::from_str(raw.trim()).ok()?;
         let obj = v.as_object()?;
 
@@ -29,7 +36,6 @@ impl ParserTemplate for JsonLinesTemplate {
         let scope = pick_str(obj, SCOPE_KEYS);
         let message = pick_str(obj, MESSAGE_KEYS).unwrap_or_default();
 
-        // 其余字段放进 fields（值统一字符串化，方便 ScopeFilter 通用匹配）
         let consumed: Vec<&str> = TIME_KEYS.iter()
             .chain(LEVEL_KEYS).chain(SCOPE_KEYS).chain(MESSAGE_KEYS)
             .copied().collect();
@@ -61,7 +67,6 @@ fn stringify(v: &Value) -> String {
 }
 
 fn parse_time(s: &str) -> Option<DateTime<Utc>> {
-    // 优先 RFC3339；失败再试普通 datetime
     DateTime::parse_from_rfc3339(s).ok().map(|d| d.with_timezone(&Utc))
 }
 
@@ -71,11 +76,12 @@ mod tests {
     use crate::model::LogLevel;
 
     fn p() -> JsonLinesTemplate { JsonLinesTemplate }
+    fn lines(s: &str) -> Vec<String> { vec![s.to_string()] }
 
     #[test]
     fn parses_standard_line() {
         let raw = r#"{"time":"2026-05-22T09:00:00Z","level":"info","logger":"auth","msg":"hi","x":1}"#;
-        let r = p().parse_line(raw).unwrap();
+        let r = p().parse_record(&lines(raw)).unwrap();
         assert_eq!(r.level, LogLevel::Info);
         assert_eq!(r.scope.as_deref(), Some("auth"));
         assert_eq!(r.message, "hi");
@@ -86,7 +92,7 @@ mod tests {
     #[test]
     fn supports_alternate_keys() {
         let raw = r#"{"ts":"2026-05-22T09:00:00Z","severity":"WARN","module":"db","message":"slow"}"#;
-        let r = p().parse_line(raw).unwrap();
+        let r = p().parse_record(&lines(raw)).unwrap();
         assert_eq!(r.level, LogLevel::Warn);
         assert_eq!(r.scope.as_deref(), Some("db"));
         assert_eq!(r.message, "slow");
@@ -94,14 +100,23 @@ mod tests {
 
     #[test]
     fn returns_none_on_garbage() {
-        assert!(p().parse_line("this is not json").is_none());
-        assert!(p().parse_line("").is_none());
+        assert!(p().parse_record(&lines("this is not json")).is_none());
+        assert!(p().parse_record(&lines("")).is_none());
     }
 
     #[test]
     fn missing_level_yields_unknown() {
         let raw = r#"{"msg":"hi"}"#;
-        let r = p().parse_line(raw).unwrap();
+        let r = p().parse_record(&lines(raw)).unwrap();
         assert_eq!(r.level, LogLevel::Unknown);
+    }
+
+    #[test]
+    fn is_record_start_detects_json_object() {
+        assert!(p().is_record_start(r#"{"a":1}"#));
+        assert!(p().is_record_start(r#"  {"a":1}  "#));
+        assert!(!p().is_record_start("garbage"));
+        assert!(!p().is_record_start(""));
+        assert!(!p().is_record_start(r#"[1,2,3]"#));
     }
 }

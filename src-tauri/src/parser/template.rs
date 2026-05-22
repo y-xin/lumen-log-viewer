@@ -1,17 +1,17 @@
 // 解析模板抽象：所有内置 / 自定义模板都实现 ParserTemplate
-// MVP 只实现 JsonLines；其余模板放 Plan 2
 
 use crate::model::LogEntry;
 
 pub trait ParserTemplate: Send + Sync {
-    fn id(&self) -> &'static str;
-    fn name(&self) -> &'static str;
-    /// 解析一行原始文本。返回 None 表示彻底无法解析；
-    /// 上层会用兜底逻辑把它包成 level=Unknown 的 LogEntry。
-    fn parse_line(&self, raw: &str) -> Option<PartialEntry>;
+    fn id(&self) -> &str;
+    fn name(&self) -> &str;
+    /// 判断一行是否是一条新日志的"起始行"。续行（不匹配的行）追加到前一条 entry 的 raw 里。
+    fn is_record_start(&self, line: &str) -> bool;
+    /// 在合并后的 N 行上解析（lines[0] 是起始行，lines[1..] 是续行）。
+    /// 返回 None 表示无法解析，上层会用 fallback 兜底。
+    fn parse_record(&self, lines: &[String]) -> Option<PartialEntry>;
 }
 
-/// 模板只负责"从行里提取字段"；line_no、raw、兜底由 ParserEngine 统一填
 pub struct PartialEntry {
     pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
     pub level: crate::model::LogLevel,
@@ -20,7 +20,6 @@ pub struct PartialEntry {
     pub fields: std::collections::HashMap<String, String>,
 }
 
-/// 把 PartialEntry 装配成完整 LogEntry
 pub fn finalize(line_no: u32, line_count: u32, raw: &str, p: PartialEntry) -> LogEntry {
     LogEntry {
         line_no,
@@ -34,7 +33,6 @@ pub fn finalize(line_no: u32, line_count: u32, raw: &str, p: PartialEntry) -> Lo
     }
 }
 
-/// 解析失败兜底：保留行内容，level=Unknown
 pub fn fallback(line_no: u32, line_count: u32, raw: &str) -> LogEntry {
     LogEntry {
         line_no,

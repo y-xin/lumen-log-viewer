@@ -128,3 +128,18 @@ export interface ExportResult {
   count: number;
   bytes_written: number;
 }
+
+// ─── Cross-page Detail Nav ───
+
+export type NeighborDir = 'prev' | 'next';
+
+export interface NeighborResponse {
+  entry: LogEntry;
+  position: number;     // 1-based
+  total: number;
+}
+
+export interface PositionResponse {
+  position: number;
+  total: number;
+}

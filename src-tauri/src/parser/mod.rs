@@ -5,6 +5,7 @@ pub mod level;
 pub mod grouping;
 pub mod tail_parser;
 pub mod regex_template;
+pub mod registry;
 
 use crate::model::{FileMetadata, LogEntry, LogLevel};
 use grouping::group_records;

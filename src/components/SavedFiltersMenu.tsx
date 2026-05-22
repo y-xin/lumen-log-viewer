@@ -45,6 +45,13 @@ export function SavedFiltersMenu() {
     listSavedFilters(path).then(setFilters).catch((e) => setError(String(e)));
   }, [open, path, setError]);
 
+  // 接收 ⌘S 全局快捷键：打开下拉
+  useEffect(() => {
+    const handler = () => setOpen(true);
+    window.addEventListener('lv:open-saved-filters', handler);
+    return () => window.removeEventListener('lv:open-saved-filters', handler);
+  }, []);
+
   if (!metadata || !path) return null;
 
   const close = () => {

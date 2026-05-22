@@ -46,6 +46,7 @@ pub fn time_buckets(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::LogLevel;
     use chrono::TimeZone;
     use std::collections::HashMap as HMap;
 

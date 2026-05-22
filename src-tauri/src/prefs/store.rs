@@ -348,4 +348,94 @@ mod tests {
         let r = compile_custom_template(&c);
         assert!(matches!(r, Err(AppError::Parse(_))));
     }
+
+    use crate::query::{MatchMode, ScopeFilter as QScopeFilter};
+
+    fn sample_filter(id: &str, name: &str, created: &str) -> SavedFilter {
+        SavedFilter {
+            id: id.into(),
+            name: name.into(),
+            created_at: created.into(),
+            levels: Some(vec!["error".into()]),
+            scope_filter: Some(QScopeFilter {
+                field_name: "scope".into(),
+                pattern: "auth.*".into(),
+                mode: MatchMode::Glob,
+            }),
+            text_search: None,
+        }
+    }
+
+    #[test]
+    fn save_filter_and_list_roundtrip() {
+        let dir = tempdir().unwrap();
+        let store = PrefsStore::at(dir.path().join("prefs.json"));
+        let f = sample_filter("id1", "f1", "2026-05-22T10:00:00Z");
+        let updated = store.save_filter("/a.log", f).unwrap();
+        assert_eq!(updated.len(), 1);
+        assert_eq!(updated[0].id, "id1");
+        let listed = store.list_filters("/a.log");
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].name, "f1");
+    }
+
+    #[test]
+    fn save_filter_two_for_same_path_returns_sorted_desc_by_created_at() {
+        let dir = tempdir().unwrap();
+        let store = PrefsStore::at(dir.path().join("prefs.json"));
+        store
+            .save_filter("/a.log", sample_filter("a", "old", "2026-05-22T08:00:00Z"))
+            .unwrap();
+        let v = store
+            .save_filter("/a.log", sample_filter("b", "new", "2026-05-22T10:00:00Z"))
+            .unwrap();
+        assert_eq!(v.len(), 2);
+        assert_eq!(v[0].id, "b"); // 新的在前
+        assert_eq!(v[1].id, "a");
+    }
+
+    #[test]
+    fn delete_filter_is_idempotent_on_missing_id() {
+        let dir = tempdir().unwrap();
+        let store = PrefsStore::at(dir.path().join("prefs.json"));
+        store
+            .save_filter("/a.log", sample_filter("keep", "k", "2026-05-22T10:00:00Z"))
+            .unwrap();
+        let v = store.delete_filter("/a.log", "doesnotexist").unwrap();
+        assert_eq!(v.len(), 1); // 原条目仍在
+        let v2 = store.delete_filter("/a.log", "keep").unwrap();
+        assert!(v2.is_empty());
+    }
+
+    #[test]
+    fn rename_filter_errors_when_id_missing() {
+        let dir = tempdir().unwrap();
+        let store = PrefsStore::at(dir.path().join("prefs.json"));
+        store
+            .save_filter("/a.log", sample_filter("x", "old", "2026-05-22T10:00:00Z"))
+            .unwrap();
+        let r = store.rename_filter("/a.log", "wrongid", "newname");
+        assert!(matches!(r, Err(AppError::Internal(_))));
+        // 原 name 没变
+        let v = store.list_filters("/a.log");
+        assert_eq!(v[0].name, "old");
+    }
+
+    #[test]
+    fn filters_on_different_paths_are_isolated() {
+        let dir = tempdir().unwrap();
+        let store = PrefsStore::at(dir.path().join("prefs.json"));
+        store
+            .save_filter("/a.log", sample_filter("a", "fa", "2026-05-22T10:00:00Z"))
+            .unwrap();
+        store
+            .save_filter("/b.log", sample_filter("b", "fb", "2026-05-22T10:00:00Z"))
+            .unwrap();
+        let va = store.list_filters("/a.log");
+        let vb = store.list_filters("/b.log");
+        assert_eq!(va.len(), 1);
+        assert_eq!(vb.len(), 1);
+        assert_eq!(va[0].id, "a");
+        assert_eq!(vb[0].id, "b");
+    }
 }

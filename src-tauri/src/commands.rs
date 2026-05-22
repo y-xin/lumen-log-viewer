@@ -58,7 +58,16 @@ pub fn cmd_query(
     state: State<'_, SessionState>,
 ) -> Result<QueryResponse, AppError> {
     let matched = query::run_query(&state, &spec)?;
-    let stats = state.with_entries(|entries| stats::aggregate(entries, &matched))?;
+    let meta = state.metadata()?;
+    let stats = state.with_entries(|entries| {
+        let mut s = stats::aggregate(entries, &matched);
+        // 时间窗口：用 spec.time_range（若有）否则用文件整体 time_range
+        let range = spec.time_range.or(meta.time_range);
+        if let Some((from, to)) = range {
+            s.time_buckets = stats::time_buckets(entries, &matched, (from, to), stats::DEFAULT_BUCKET_COUNT);
+        }
+        s
+    })?;
     let page_entries = state.with_entries(|entries| {
         let start = (page * page_size) as usize;
         let end = ((page + 1) * page_size) as usize;

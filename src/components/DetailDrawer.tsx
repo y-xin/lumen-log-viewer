@@ -26,12 +26,23 @@ export function DetailDrawer() {
   const onPrev = async () => {
     if (!selectedEntry) return;
     const n = await getNeighbor(spec, selectedEntry.line_no, 'prev');
-    if (n) { setSelectedEntry(n.entry); setPosition(n.position); setTotal(n.total); }
+    if (n) {
+      setSelectedEntry(n.entry);
+      setPosition(n.position);
+      setTotal(n.total);
+      // 同步滚动列表到新 entry（复用 lv:goto-line 事件，避免给 LogList 钻 prop）
+      window.dispatchEvent(new CustomEvent('lv:goto-line', { detail: { lineNo: n.entry.line_no } }));
+    }
   };
   const onNext = async () => {
     if (!selectedEntry) return;
     const n = await getNeighbor(spec, selectedEntry.line_no, 'next');
-    if (n) { setSelectedEntry(n.entry); setPosition(n.position); setTotal(n.total); }
+    if (n) {
+      setSelectedEntry(n.entry);
+      setPosition(n.position);
+      setTotal(n.total);
+      window.dispatchEvent(new CustomEvent('lv:goto-line', { detail: { lineNo: n.entry.line_no } }));
+    }
   };
 
   const canPrev = position != null && position > 1;

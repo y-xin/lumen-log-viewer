@@ -57,3 +57,11 @@ export async function deleteCustomTemplate(id: string): Promise<void> {
 export async function testTemplate(tpl: CustomTemplate, limit: number): Promise<TestResult> {
   return invoke<TestResult>('cmd_test_template', { tpl, limit });
 }
+
+export async function startFollow(): Promise<void> {
+  return invoke<void>('cmd_start_follow');
+}
+
+export async function stopFollow(): Promise<void> {
+  return invoke<void>('cmd_stop_follow');
+}

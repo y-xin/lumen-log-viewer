@@ -1,5 +1,7 @@
 // bracket-electron 模板：Electron 应用 (electron-log) 风格
-// 样例：[2026-05-21 17:26:37.566] [info] (main/network-manager) message {fields...}
+// 样例 A：[2026-05-21 17:26:37.566] [info] (main/network-manager) message {fields...}
+// 样例 B：[2026-05-22 10:41:22.203] [info] [app-update] message {fields...}
+// scope 同时接受圆括号 (name) 与方括号 [name]
 
 use crate::parser::regex_template::{FieldMap, RegexTemplate};
 use crate::parser::tail_parser::TailParserKind;
@@ -10,7 +12,7 @@ pub fn template() -> RegexTemplate {
         id: "bracket-electron".into(),
         name: "Bracket (Electron)".into(),
         pattern: Regex::new(
-            r"^\[(?P<ts>[^\]]+)\] \[(?P<level>[^\]]+)\] \((?P<scope>[^\)]+)\) (?P<message>.*)$"
+            r"^\[(?P<ts>[^\]]+)\] \[(?P<level>[^\]]+)\] [\[\(](?P<scope>[^\]\)]+)[\]\)] (?P<message>.*)$"
         ).unwrap(),
         start_pattern: Regex::new(r"^\[\d{4}-\d{2}-\d{2}[ T]").unwrap(),
         time_formats: vec![
@@ -84,5 +86,27 @@ mod tests {
         assert!(t.is_record_start("[2026-05-21 17:26:37.566] [info] (x) y"));
         assert!(!t.is_record_start("  continuation"));
         assert!(!t.is_record_start("garbage"));
+    }
+
+    #[test]
+    fn parses_bracket_scope_variant() {
+        // 用户实际场景：scope 也用方括号 [app-update] 而不是圆括号
+        let t = template();
+        let raw = "[2026-05-22 10:41:22.203] [info] [app-update] service started";
+        let r = t.parse_record(&[raw.to_string()]).unwrap();
+        assert_eq!(r.level, LogLevel::Info);
+        assert_eq!(r.scope.as_deref(), Some("app-update"));
+        assert_eq!(r.message, "service started");
+    }
+
+    #[test]
+    fn parses_bracket_scope_with_tail_json() {
+        let t = template();
+        let raw = r#"[2026-05-22 10:41:22.211] [warn] [app-update] check error { message: '检测失败，请稍后重试', code: 'network failed' }"#;
+        let r = t.parse_record(&[raw.to_string()]).unwrap();
+        assert_eq!(r.level, LogLevel::Warn);
+        assert_eq!(r.scope.as_deref(), Some("app-update"));
+        assert_eq!(r.message, "check error");
+        assert_eq!(r.fields.get("code").map(String::as_str), Some("network failed"));
     }
 }

@@ -5,3 +5,4 @@ pub mod bracket_common;
 pub mod python_default;
 pub mod nginx_combined;
 pub mod logfmt;
+pub mod rfc3339_bracket;

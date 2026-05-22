@@ -20,13 +20,17 @@ impl ParserTemplate for JsonLinesTemplate {
 
     fn is_record_start(&self, line: &str) -> bool {
         let t = line.trim();
-        if !t.starts_with('{') { return false; }
-        serde_json::from_str::<Value>(t).map(|v| v.is_object()).unwrap_or(false)
+        // 容忍非 JSON 前缀（如 grep/tail 多文件拼接产生的 "filename.log:{...}"）：
+        // 从第一个 `{` 开始尝试 parse；只要后面是合法 JSON 对象就当作 record start
+        let Some(start) = t.find('{') else { return false; };
+        serde_json::from_str::<Value>(&t[start..]).map(|v| v.is_object()).unwrap_or(false)
     }
 
     fn parse_record(&self, lines: &[String]) -> Option<PartialEntry> {
         let raw = lines.first()?;
-        let v: Value = serde_json::from_str(raw.trim()).ok()?;
+        let t = raw.trim();
+        let start = t.find('{')?;
+        let v: Value = serde_json::from_str(&t[start..]).ok()?;
         let obj = v.as_object()?;
 
         let timestamp = pick_str(obj, TIME_KEYS).and_then(|s| parse_time(&s));
@@ -118,5 +122,15 @@ mod tests {
         assert!(!p().is_record_start("garbage"));
         assert!(!p().is_record_start(""));
         assert!(!p().is_record_start(r#"[1,2,3]"#));
+    }
+
+    #[test]
+    fn tolerates_grep_style_prefix() {
+        // grep -r / 多文件 tail 产生的 "filename:{...}" 前缀；从第一个 `{` 开始 parse
+        let raw = r#"2026-05-19-03.log:{"date":"2026-05-19 11:49:52.534","level":32,"msg":"启动页面"}"#;
+        assert!(p().is_record_start(raw));
+        let r = p().parse_record(&lines(raw)).unwrap();
+        assert_eq!(r.level, LogLevel::Info);  // level 32 → Info（×16 体系）
+        assert_eq!(r.message, "启动页面");
     }
 }

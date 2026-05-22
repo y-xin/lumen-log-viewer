@@ -36,6 +36,7 @@ impl Registry {
             Arc::new(Tpl::Regex(builtin::python_default::template())),
             Arc::new(Tpl::Regex(builtin::nginx_combined::template())),
             Arc::new(Tpl::Logfmt(builtin::logfmt::LogfmtTemplate)),
+            Arc::new(Tpl::Regex(builtin::rfc3339_bracket::template())),
         ];
         Self { templates: RwLock::new(templates) }
     }
@@ -64,10 +65,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn registry_has_six_builtins() {
+    fn registry_has_seven_builtins() {
         let r = Registry::new_with_builtins();
         let all = r.all();
-        assert_eq!(all.len(), 6);
+        assert_eq!(all.len(), 7);
         let ids: Vec<&str> = all.iter().map(|t| t.as_parser().id()).collect();
         assert!(ids.contains(&"json-lines"));
         assert!(ids.contains(&"bracket-electron"));
@@ -75,6 +76,7 @@ mod tests {
         assert!(ids.contains(&"python-default"));
         assert!(ids.contains(&"nginx-combined"));
         assert!(ids.contains(&"logfmt"));
+        assert!(ids.contains(&"rfc3339-bracket"));
     }
 
     #[test]

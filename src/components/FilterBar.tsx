@@ -16,6 +16,21 @@ const LEVEL_COLOR: Record<LogLevel, string> = {
   unknown: 'bg-slate-100 text-slate-500',
 };
 
+// datetime-local 控件要求 'YYYY-MM-DDTHH:mm' 本地时区格式，但 spec.time_range 存 ISO（UTC）。
+// 这两个 helper 只在 UI 边界做格式转换，state/spec 仍统一 ISO。
+function isoToLocalInput(iso: string): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+function localInputToIso(local: string): string {
+  if (!local) return '';
+  const d = new Date(local);
+  return isNaN(d.getTime()) ? '' : d.toISOString();
+}
+
 export function FilterBar() {
   const { spec, patchSpec, metadata } = useSession();
 
@@ -149,18 +164,18 @@ export function FilterBar() {
         <span className="text-slate-500 ml-2">时间：</span>
         <input
           type="datetime-local"
-          value={from}
-          onChange={(e) => setFrom(e.target.value ? new Date(e.target.value).toISOString() : '')}
+          value={isoToLocalInput(from)}
+          onChange={(e) => setFrom(localInputToIso(e.target.value))}
           className="input-ctl text-[11px]"
-          style={{ width: 170 }}
+          style={{ width: 180 }}
         />
         <span className="text-slate-400">~</span>
         <input
           type="datetime-local"
-          value={to}
-          onChange={(e) => setTo(e.target.value ? new Date(e.target.value).toISOString() : '')}
+          value={isoToLocalInput(to)}
+          onChange={(e) => setTo(localInputToIso(e.target.value))}
           className="input-ctl text-[11px]"
-          style={{ width: 170 }}
+          style={{ width: 180 }}
         />
       </div>
     </div>

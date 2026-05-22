@@ -197,7 +197,9 @@ export function LogList() {
     return (
       <div
         style={style}
-        onClick={() => setSelectedEntry(isSelected ? null : e)}
+        // 用 mousedown 而不是 click：tail-follow 模式下列表持续 scrollToItem，
+        // mousedown→mouseup 之间 DOM 已滚动，click 事件不会触发；改用 mousedown 在按下瞬间锁定选择。
+        onMouseDown={() => setSelectedEntry(isSelected ? null : e)}
         className={[
           'px-2 text-xs flex items-stretch gap-0 font-mono border-b border-slate-100 cursor-pointer',
           isSelected ? 'bg-blue-50' : 'hover:bg-slate-50',

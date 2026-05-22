@@ -2,7 +2,7 @@
 // 列：行号 / 时间 / level / scope / message+fields（可拖动调整 4 个边界）
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { FixedSizeList as List, ListChildComponentProps, ListOnScrollProps } from 'react-window';
+import { VariableSizeList as List, ListChildComponentProps, ListOnItemsRenderedProps } from 'react-window';
 import { getPage } from '../api/commands';
 import { useSession } from '../state/session';
 import type { LogEntry, LogLevel } from '../types/log';
@@ -10,7 +10,8 @@ import { HighlightedText } from './HighlightedText';
 
 const PAGE_SIZE = 200;
 const ROW_HEIGHT = 28;
-const BOTTOM_THRESHOLD = 20;
+const EXPANDED_LINE_HEIGHT = 16;          // 展开块每额外一行的高度
+const EXPANDED_MAX_EXTRA_LINES = 10;       // 单个 entry 展开最多额外显示 10 行（防止占满视口）
 const STATUS_BAR_HEIGHT = 28;
 
 const LEVEL_COLOR: Record<LogLevel, string> = {
@@ -53,6 +54,13 @@ function lineLabel(e: LogEntry): string {
   return e.line_count > 1 ? `${e.line_no}-${e.line_no + e.line_count - 1}` : `${e.line_no}`;
 }
 
+// 返回 raw 去掉首行后的剩余部分（已 trim 行末换行残留）
+function restOfRaw(raw: string): string {
+  const i = raw.indexOf('\n');
+  if (i < 0) return '';
+  return raw.slice(i + 1);
+}
+
 // 用 spec 的 JSON 字符串作为"会话指纹" — 文件变 / spec 变 → 指纹变 → 重置 entries。
 // 单纯 follow append 时（result 引用换了但 spec 没变 + total_matched 增大）→ 保留已加载的 entries 防止闪烁。
 function specKey(s: unknown): string {
@@ -65,6 +73,8 @@ export function LogList() {
   const pendingPages = useRef<Set<number>>(new Set());
   const seq = useRef(0);
   const listRef = useRef<List | null>(null);
+  // 多行 entry 展开状态：line_no → 是否展开
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
   // 跟踪是否在底部；state 而非 ref，让"跳到底部"按钮能根据它显隐
   const [atBottom, setAtBottom] = useState(true);
   const lastSpecKey = useRef<string>('');
@@ -150,6 +160,34 @@ export function LogList() {
     }
   }, [result, curKey, atBottom, clearNewEntriesPending]);
 
+  // 文件切换 / spec 变化 → 清空展开状态 + 刷 VariableSizeList 尺寸缓存
+  useEffect(() => {
+    setExpanded(new Set());
+    listRef.current?.resetAfterIndex(0);
+  }, [curKey]);
+
+  // 行高动态计算：折叠 28px / 展开 28 + (line_count-1) * 16，但单 entry 上限 11 行
+  const getItemSize = useCallback((index: number) => {
+    const e = entries[index];
+    if (!e || e.line_count <= 1) return ROW_HEIGHT;
+    if (!expanded.has(e.line_no)) return ROW_HEIGHT;
+    const extra = Math.min(e.line_count - 1, EXPANDED_MAX_EXTRA_LINES);
+    return ROW_HEIGHT + extra * EXPANDED_LINE_HEIGHT;
+  }, [entries, expanded]);
+
+  const toggleExpand = useCallback((lineNo: number) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(lineNo)) next.delete(lineNo); else next.add(lineNo);
+      return next;
+    });
+    // 立即清除尺寸缓存，下次 render 用新高度
+    listRef.current?.resetAfterIndex(0);
+  }, []);
+
+  // selectedEntry 变化时也清缓存（防 row content 变化导致高度过期 — 实际无 height 变化，但保险）
+  // 这里不做，避免不必要 reset。展开 toggle 和 spec 变化已经覆盖。
+
   const fetchPage = async (pageIdx: number) => {
     if (pendingPages.current.has(pageIdx)) return;
     pendingPages.current.add(pageIdx);
@@ -167,10 +205,10 @@ export function LogList() {
     }
   };
 
-  const onScroll = ({ scrollOffset }: ListOnScrollProps) => {
-    if (!result) return;
-    const maxScroll = result.total_matched * ROW_HEIGHT - (listH - 28);
-    const isAtBottom = (maxScroll - scrollOffset) < BOTTOM_THRESHOLD;
+  // VariableSizeList 下行高不固定 → 用 onItemsRendered 的 visibleStopIndex 判断 atBottom
+  const onItemsRendered = ({ visibleStopIndex }: ListOnItemsRenderedProps) => {
+    if (!result || result.total_matched === 0) return;
+    const isAtBottom = visibleStopIndex >= result.total_matched - 1;
     setAtBottom(isAtBottom);
     if (isAtBottom && newEntriesPending > 0) {
       clearNewEntriesPending();
@@ -192,9 +230,22 @@ export function LogList() {
       return <div style={style} className="px-2 text-slate-300 text-xs flex items-center">…</div>;
     }
     const isSelected = selectedEntry?.line_no === e.line_no;
+    const isMultiline = e.line_count > 1;
+    const isExpanded = isMultiline && expanded.has(e.line_no);
     const fieldsTxt = formatFields(e.fields);
     const messageTxt = e.message || e.raw;
     const combined = fieldsTxt ? `${messageTxt}    ${fieldsTxt}` : messageTxt;
+    // 展开块左侧缩进对齐到 message 列起点
+    const expandedIndent = widths.line + widths.time + widths.level + widths.scope + 8;
+    // 展开块裁掉 raw 首行 + 可能截断到上限
+    let restRaw = restOfRaw(e.raw);
+    const restLines = restRaw ? restRaw.split('\n') : [];
+    let truncatedNote: string | null = null;
+    if (restLines.length > EXPANDED_MAX_EXTRA_LINES) {
+      restRaw = restLines.slice(0, EXPANDED_MAX_EXTRA_LINES).join('\n');
+      truncatedNote = `… 余 ${restLines.length - EXPANDED_MAX_EXTRA_LINES} 行未显示（查看详情抽屉 Raw 区）`;
+    }
+
     return (
       <div
         style={style}
@@ -202,25 +253,46 @@ export function LogList() {
         // mousedown→mouseup 之间 DOM 已滚动，click 事件不会触发；改用 mousedown 在按下瞬间锁定选择。
         onMouseDown={() => setSelectedEntry(isSelected ? null : e)}
         className={[
-          'px-2 text-xs flex items-stretch gap-0 font-mono border-b border-slate-100 cursor-pointer',
+          'text-xs flex flex-col font-mono border-b border-slate-100 cursor-pointer',
           isSelected ? 'bg-blue-50' : 'hover:bg-slate-50',
         ].join(' ')}
       >
-        <span style={{ width: widths.line }} className="flex items-center text-slate-400 text-right justify-end pr-2">
-          {lineLabel(e)}
-        </span>
-        <span style={{ width: widths.time }} className="flex items-center text-slate-500 truncate px-2">
-          {e.timestamp ?? '-'}
-        </span>
-        <span style={{ width: widths.level }} className={['flex items-center uppercase px-2', LEVEL_COLOR[e.level]].join(' ')}>
-          {e.level}
-        </span>
-        <span style={{ width: widths.scope }} className="flex items-center text-slate-600 truncate px-2">
-          {e.scope ?? '-'}
-        </span>
-        <span className="flex-1 flex items-center truncate px-2" title={combined}>
-          <HighlightedText text={combined} needle={spec.text_search ?? ''} />
-        </span>
+        <div className="px-2 flex items-stretch gap-0" style={{ height: ROW_HEIGHT }}>
+          <span style={{ width: widths.line }} className="flex items-center text-slate-400 text-right justify-end pr-2">
+            {lineLabel(e)}
+          </span>
+          <span style={{ width: widths.time }} className="flex items-center text-slate-500 truncate px-2">
+            {e.timestamp ?? '-'}
+          </span>
+          <span style={{ width: widths.level }} className={['flex items-center uppercase px-2', LEVEL_COLOR[e.level]].join(' ')}>
+            {e.level}
+          </span>
+          <span style={{ width: widths.scope }} className="flex items-center text-slate-600 truncate px-2">
+            {e.scope ?? '-'}
+          </span>
+          <span className="flex-1 flex items-center truncate px-2" title={combined}>
+            <HighlightedText text={combined} needle={spec.text_search ?? ''} />
+          </span>
+          {isMultiline && (
+            <button
+              onMouseDown={(ev) => { ev.stopPropagation(); }}
+              onClick={(ev) => { ev.stopPropagation(); toggleExpand(e.line_no); }}
+              className="text-slate-400 hover:text-slate-700 px-2 self-stretch flex items-center"
+              title={isExpanded ? `折叠（${e.line_count} 行）` : `展开（${e.line_count} 行）`}
+            >
+              {isExpanded ? '▾' : '▸'} {e.line_count}
+            </button>
+          )}
+        </div>
+        {isExpanded && restRaw && (
+          <div
+            className="font-mono text-xs whitespace-pre text-slate-600 bg-slate-50/60 border-t border-slate-100 overflow-hidden"
+            style={{ paddingLeft: expandedIndent, paddingRight: 8, paddingTop: 2, paddingBottom: 2, lineHeight: `${EXPANDED_LINE_HEIGHT}px` }}
+          >
+            <HighlightedText text={restRaw} needle={spec.text_search ?? ''} />
+            {truncatedNote && <div className="text-slate-400 italic mt-1">{truncatedNote}</div>}
+          </div>
+        )}
       </div>
     );
   };
@@ -252,9 +324,10 @@ export function LogList() {
           ref={listRef}
           height={Math.max(0, listH - 28)}      // 减去表头高
           itemCount={result.total_matched}
-          itemSize={ROW_HEIGHT}
+          itemSize={getItemSize}
+          estimatedItemSize={ROW_HEIGHT}
           width="100%"
-          onScroll={onScroll}
+          onItemsRendered={onItemsRendered}
         >
           {Row}
         </List>

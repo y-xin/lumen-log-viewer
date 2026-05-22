@@ -19,6 +19,18 @@ pub struct QueryResponse {
     pub stats: Stats,
 }
 
+#[derive(Serialize)]
+pub struct TemplateInfo {
+    pub id: String,
+    pub name: String,
+    pub builtin: bool,
+}
+
+const BUILTIN_IDS: &[&str] = &[
+    "json-lines", "bracket-electron", "bracket-common",
+    "python-default", "nginx-combined", "logfmt",
+];
+
 #[tauri::command]
 pub fn cmd_open_file(
     path: String,
@@ -74,4 +86,33 @@ pub fn cmd_get_page(
             .filter_map(|&i| entries.get(i as usize).cloned())
             .collect()
     })
+}
+
+#[tauri::command]
+pub fn cmd_list_templates(registry: State<'_, Registry>) -> Vec<TemplateInfo> {
+    registry.all().iter().map(|t| {
+        let id = t.as_parser().id().to_string();
+        let builtin = BUILTIN_IDS.contains(&id.as_str());
+        TemplateInfo {
+            id: id.clone(),
+            name: t.as_parser().name().to_string(),
+            builtin,
+        }
+    }).collect()
+}
+
+#[tauri::command]
+pub fn cmd_reparse_with_template(
+    template_id: String,
+    state: State<'_, SessionState>,
+    registry: State<'_, Registry>,
+) -> Result<FileMetadata, AppError> {
+    let lines = state.lines()?;
+    let tpl = registry.find(&template_id)
+        .ok_or_else(|| AppError::Internal(format!("模板未找到：{template_id}")))?;
+    let entries = parser::parse_with_template(tpl.as_parser(), &lines);
+    let old_meta = state.metadata()?;
+    let metadata = parser::compute_metadata(&old_meta.path, &entries, &template_id);
+    state.load_with_lines(metadata.clone(), entries, lines.to_vec());
+    Ok(metadata)
 }

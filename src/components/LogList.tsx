@@ -20,7 +20,7 @@ const LEVEL_COLOR: Record<LogLevel, string> = {
 };
 
 export function LogList() {
-  const { spec, result } = useSession();
+  const { spec, result, selectedLineNo, setSelectedLineNo } = useSession();
   // 全局条目缓冲：index → entry；空槽未加载
   const [entries, setEntries] = useState<(LogEntry | undefined)[]>([]);
   const pendingPages = useRef<Set<number>>(new Set());
@@ -60,8 +60,16 @@ export function LogList() {
       fetchPage(pageIdx);
       return <div style={style} className="px-2 text-slate-300 text-xs flex items-center">…</div>;
     }
+    const isSelected = selectedLineNo === e.line_no;
     return (
-      <div style={style} className="px-2 text-xs flex items-center gap-3 font-mono border-b border-slate-100">
+      <div
+        style={style}
+        onClick={() => setSelectedLineNo(isSelected ? null : e.line_no)}
+        className={[
+          'px-2 text-xs flex items-center gap-3 font-mono border-b border-slate-100 cursor-pointer',
+          isSelected ? 'bg-blue-50' : 'hover:bg-slate-50',
+        ].join(' ')}
+      >
         <span className="text-slate-400 w-16 text-right">
           {e.line_count > 1 ? `#${e.line_no}-${e.line_no + e.line_count - 1}` : `#${e.line_no}`}
         </span>

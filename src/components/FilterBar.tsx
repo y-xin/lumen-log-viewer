@@ -1,7 +1,7 @@
 // 筛选栏：level toggle + scope（字段+模式+模式选择） + 关键词 + 时间区间
 // 输入有 150ms debounce，对外通过 useSession 的 patchSpec 暴露
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSession } from '../state/session';
 import type { LogLevel, MatchMode } from '../types/log';
 import { ExportMenu } from './ExportMenu';
@@ -34,6 +34,7 @@ function localInputToIso(local: string): string {
 
 export function FilterBar() {
   const { spec, patchSpec, metadata } = useSession();
+  const keywordRef = useRef<HTMLInputElement>(null);
 
   // 本地输入态（debounce 后再写 store）
   const [keyword, setKeyword] = useState(spec.text_search ?? '');
@@ -82,6 +83,34 @@ export function FilterBar() {
     }, 150);
     return () => clearTimeout(t);
   }, [from, to, patchSpec]);
+
+  // 反向同步：spec.text_search 外部变化（如 ⌘K 清空）→ 回填 local
+  useEffect(() => {
+    if ((spec.text_search ?? '') === keyword) return;
+    setKeyword(spec.text_search ?? '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spec.text_search]);
+
+  // 反向同步：spec.time_range 外部变化 → 回填 local
+  useEffect(() => {
+    const localTr: [string, string] | null = from && to ? [from, to] : null;
+    if (JSON.stringify(localTr) === JSON.stringify(spec.time_range)) return;
+    setFrom(spec.time_range?.[0] ?? '');
+    setTo(spec.time_range?.[1] ?? '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spec.time_range]);
+
+  // 接收 ⌘F 全局快捷键：聚焦关键词输入框并全选当前内容
+  useEffect(() => {
+    const handler = () => {
+      const el = keywordRef.current;
+      if (!el) return;
+      el.focus();
+      el.select();
+    };
+    window.addEventListener('lv:focus-keyword', handler);
+    return () => window.removeEventListener('lv:focus-keyword', handler);
+  }, []);
 
   const fieldOptions = useMemo(() => {
     // "scope" + 当前文件出现过的 fields 名（MVP 简化：只列 "scope"）
@@ -160,6 +189,7 @@ export function FilterBar() {
       <div className="flex items-center gap-1.5 text-sm">
         <span className="text-slate-500">关键词：</span>
         <input
+          ref={keywordRef}
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
           placeholder="在 message / 原始行中搜索"

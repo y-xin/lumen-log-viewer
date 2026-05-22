@@ -1,0 +1,5 @@
+2026-05-22 12:00:00 [INFO] [auth] login ok
+2026-05-22 12:00:01.123 [WARN] [db] slow query 1.2s
+2026-05-22 12:00:02.456 [ERROR] [auth] token invalid for user 42
+2026-05-22 12:00:03 [DEBUG] [db.pool] acquire conn
+2026-05-22 12:00:04 [INFO] [http] GET /api/users 200

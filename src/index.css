@@ -2,15 +2,105 @@
 @tailwind components;
 @tailwind utilities;
 
-/* 禁掉 macOS WebView 默认的 overscroll bounce —— 滚到顶/底时整个页面跟着橡皮筋反弹 */
+/* === Design tokens ─ Style v3 === */
+:root {
+  --bg: #f8fafc;
+  --surface: #ffffff;
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --text: #0f172a;
+  --text-2: #475569;
+  --text-3: #94a3b8;
+  --accent: #2563eb;
+  --accent-bg: #eff6ff;
+
+  --h-control: 28px;
+  --h-control-sm: 22px;
+  --radius: 5px;
+  --radius-sm: 4px;
+}
+
+/* === Utility: 统一 toolbar 控件高度与外观 === */
+.ctl {
+  height: var(--h-control);
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  font-size: 12px;
+  line-height: 1;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+.ctl:hover { background: #f1f5f9; }
+.ctl:disabled { opacity: 0.5; cursor: not-allowed; }
+.ctl-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.ctl-primary:hover { background: #1d4ed8; }
+
+.ctl-segment {
+  height: var(--h-control);
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-sizing: border-box;
+}
+.ctl-segment > button {
+  padding: 0 8px;
+  font-size: 12px;
+  border: none;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  border-right: 1px solid var(--border-strong);
+}
+.ctl-segment > button:last-child { border-right: none; }
+.ctl-segment > button:hover { background: #f1f5f9; }
+.ctl-segment > button.active { background: #334155; color: #fff; }
+
+.input-ctl {
+  height: var(--h-control);
+  box-sizing: border-box;
+  padding: 0 8px;
+  font-size: 12px;
+  line-height: 1;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+}
+.input-ctl:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-bg);
+}
+
+.select-ctl {
+  height: var(--h-control);
+  box-sizing: border-box;
+  padding: 0 18px 0 6px;
+  font-size: 11px;
+  line-height: 1;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface) url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath d='M2 4l3 3 3-3' stroke='%2394a3b8' fill='none' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 6px center;
+  appearance: none;
+  -webkit-appearance: none;
+  color: var(--text);
+  cursor: pointer;
+}
+
+/* === 已有：禁 overscroll bounce + 拖拽误选 === */
 html, body, #root {
   overscroll-behavior: none;
   overflow: hidden;
   height: 100%;
 }
 
-/* 禁掉文本拖拽选中导致的窗口跟随移动（拖空白处误选 + Tauri 默认 webkit drag）。
-   列表行、抽屉内可选文本由各自组件覆盖（user-select: text） */
 body {
   user-select: none;
   -webkit-user-select: none;

@@ -4,7 +4,7 @@
 // 高度：用 ResizeObserver 测量容器实际大小（避免硬编码 innerHeight - 280 在 sparkline
 //       折叠 / 窗口缩放 / 不同 header 高度下算错而切掉底部行）
 
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { FixedSizeList as List, ListChildComponentProps, ListOnScrollProps } from 'react-window';
 import { getPage } from '../api/commands';
 import { useSession } from '../state/session';
@@ -33,19 +33,31 @@ export function LogList() {
   const listRef = useRef<List | null>(null);
   const atBottomRef = useRef(true);
 
-  // 实际可用高度（由 ResizeObserver 测量外层 div）
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const [containerHeight, setContainerHeight] = useState(0);
-
-  useLayoutEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const update = () => setContainerHeight(el.clientHeight);
-    update();
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    return () => ro.disconnect();
+  // 实际可用高度：用 callback ref + ResizeObserver。
+  // callback ref 比 useRef+useLayoutEffect 更可靠 —— mount/unmount 时同步触发，
+  // 解决"组件 conditional 渲染 + useLayoutEffect 只跑一次"的初始高度为 0 的问题。
+  const [containerHeight, setContainerHeight] = useState<number>(() =>
+    Math.max(0, window.innerHeight - 280) // fallback 初值，避免首帧 0
+  );
+  const observerRef = useRef<ResizeObserver | null>(null);
+  const containerRef = useCallback((node: HTMLDivElement | null) => {
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+      observerRef.current = null;
+    }
+    if (!node) return;
+    const measure = () => {
+      const h = node.clientHeight;
+      if (h > 0) setContainerHeight(h);
+    };
+    // 立即测一次；再用 RAF 等浏览器完成布局后再测一次（覆盖 flex 撑开延迟到下一帧的情况）
+    measure();
+    requestAnimationFrame(measure);
+    const ro = new ResizeObserver(measure);
+    ro.observe(node);
+    observerRef.current = ro;
   }, []);
+  useEffect(() => () => observerRef.current?.disconnect(), []);
 
   const listH = Math.max(0, containerHeight - STATUS_BAR_HEIGHT);
 
@@ -128,18 +140,16 @@ export function LogList() {
 
   return (
     <div ref={containerRef} className="flex-1 overflow-hidden relative">
-      {listH > 0 && (
-        <List
-          ref={listRef}
-          height={listH}
-          itemCount={result.total_matched}
-          itemSize={ROW_HEIGHT}
-          width="100%"
-          onScroll={onScroll}
-        >
-          {Row}
-        </List>
-      )}
+      <List
+        ref={listRef}
+        height={listH}
+        itemCount={result.total_matched}
+        itemSize={ROW_HEIGHT}
+        width="100%"
+        onScroll={onScroll}
+      >
+        {Row}
+      </List>
       {showFloating && (
         <button
           onClick={jumpToBottom}

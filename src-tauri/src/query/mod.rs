@@ -1,5 +1,6 @@
 pub mod spec;
 pub mod filter;
+pub mod neighbor;
 
 pub use spec::{MatchMode, QuerySpec, ScopeFilter};
 

@@ -215,17 +215,15 @@ export function TemplateManagerDialog({ onClose }: Props) {
             </Field>
 
             <div className="flex gap-2 pt-2">
-              <button onClick={handleTest} className="px-3 py-1 bg-slate-200 rounded hover:bg-slate-300">
-                测试解析
-              </button>
+              <button onClick={handleTest} className="ctl">测试解析</button>
               <button
                 onClick={handleSave}
                 disabled={saving || !editing.id || !editing.pattern}
-                className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                className="ctl ctl-primary"
               >
                 {saving ? '保存中…' : '保存'}
               </button>
-              <button onClick={onClose} className="ml-auto px-3 py-1 bg-slate-100 rounded">取消</button>
+              <button onClick={onClose} className="ctl ml-auto">取消</button>
             </div>
 
             {testResult && (

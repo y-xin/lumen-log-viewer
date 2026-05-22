@@ -35,17 +35,11 @@ export function RotationDialog() {
         <p className="text-sm text-slate-700 mb-4">{msg}</p>
         <div className="flex justify-end gap-2">
           {canReload && (
-            <button
-              onClick={handleReload}
-              className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
-            >
+            <button onClick={handleReload} className="ctl ctl-primary">
               重新加载
             </button>
           )}
-          <button
-            onClick={() => setRotationKind(null)}
-            className="px-3 py-1.5 bg-slate-100 text-sm rounded hover:bg-slate-200"
-          >
+          <button onClick={() => setRotationKind(null)} className="ctl">
             关闭
           </button>
         </div>

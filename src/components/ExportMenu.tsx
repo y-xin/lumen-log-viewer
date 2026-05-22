@@ -62,7 +62,7 @@ export function ExportMenu() {
       <button
         onClick={() => setOpen((v) => !v)}
         disabled={busy}
-        className="px-2 py-0.5 text-xs rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-50"
+        className="ctl"
         title="导出当前匹配条目"
       >
         {busy ? '导出中…' : '📥 导出 ▾'}

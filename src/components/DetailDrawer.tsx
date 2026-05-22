@@ -94,18 +94,10 @@ export function DetailDrawer() {
           </section>
 
           <section className="flex gap-2 pt-2">
-            <button
-              onClick={applyScope}
-              disabled={!entry.scope}
-              className="px-3 py-1 text-xs bg-slate-100 hover:bg-slate-200 rounded disabled:opacity-50"
-            >
+            <button onClick={applyScope} disabled={!entry.scope} className="ctl">
               应用 scope 筛选
             </button>
-            <button
-              onClick={applyTimeWindow}
-              disabled={!entry.timestamp}
-              className="px-3 py-1 text-xs bg-slate-100 hover:bg-slate-200 rounded disabled:opacity-50"
-            >
+            <button onClick={applyTimeWindow} disabled={!entry.timestamp} className="ctl">
               按时间区间 ±5 分钟
             </button>
           </section>

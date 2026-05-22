@@ -1,7 +1,6 @@
-// 统计面板：总数 + 每级数量 + Top scopes（点击应用为筛选）
-
 import { useSession } from '../state/session';
 import type { LogLevel } from '../types/log';
+import { TrendSparkline } from './TrendSparkline';
 
 const LEVELS: LogLevel[] = ['error', 'warn', 'info', 'debug', 'trace', 'unknown'];
 const LEVEL_COLOR: Record<LogLevel, string> = {
@@ -20,7 +19,8 @@ export function StatsPanel() {
 
   return (
     <div className="border-b bg-slate-50 px-3 py-2 text-xs">
-      <div className="flex items-center gap-4 flex-wrap">
+      <TrendSparkline />
+      <div className="flex items-center gap-4 flex-wrap mt-1">
         <span className="font-medium text-slate-700">总数 {total.toLocaleString()}</span>
         {LEVELS.map((lv) => {
           const n = level_counts[lv] ?? 0;

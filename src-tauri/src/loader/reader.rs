@@ -15,6 +15,34 @@ pub fn read_all_lines(path: &Path) -> Result<Vec<String>, AppError> {
     Ok(lines)
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct FileMeta {
+    pub size: u64,
+    pub inode: u64,
+}
+
+#[cfg(unix)]
+pub fn file_meta(path: &Path) -> Result<FileMeta, AppError> {
+    use std::os::unix::fs::MetadataExt;
+    let m = std::fs::metadata(path)?;
+    Ok(FileMeta { size: m.len(), inode: m.ino() })
+}
+
+#[cfg(not(unix))]
+pub fn file_meta(path: &Path) -> Result<FileMeta, AppError> {
+    let m = std::fs::metadata(path)?;
+    Ok(FileMeta { size: m.len(), inode: 0 })
+}
+
+pub fn read_from(path: &Path, offset: u64) -> Result<String, AppError> {
+    use std::io::{Read, Seek, SeekFrom};
+    let mut f = std::fs::File::open(path)?;
+    f.seek(SeekFrom::Start(offset))?;
+    let mut buf = Vec::new();
+    f.read_to_end(&mut buf)?;
+    Ok(String::from_utf8_lossy(&buf).into_owned())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -55,5 +83,19 @@ mod tests {
     fn missing_file_returns_io_error() {
         let r = read_all_lines(Path::new("/nonexistent/path/xyz"));
         assert!(matches!(r, Err(AppError::Io(_))));
+    }
+
+    #[test]
+    fn file_meta_returns_size() {
+        let f = write_temp(b"hello world");
+        let m = file_meta(f.path()).unwrap();
+        assert_eq!(m.size, 11);
+    }
+
+    #[test]
+    fn read_from_returns_tail_after_offset() {
+        let f = write_temp(b"line1\nline2\n");
+        let tail = read_from(f.path(), 6).unwrap();
+        assert_eq!(tail, "line2\n");
     }
 }

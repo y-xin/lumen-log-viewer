@@ -34,7 +34,6 @@ export function StatsPanel() {
       <TrendSparkline />
       {allScopes.length > 0 && (
         <div className="flex items-center gap-2 mt-0 flex-wrap">
-          <span className="text-slate-500">Scope：</span>
           {allScopes.map(([name, count]) => {
             const active = selectedScopes.has(name);
             return (

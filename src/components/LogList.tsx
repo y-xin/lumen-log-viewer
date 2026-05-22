@@ -21,6 +21,17 @@ const LEVEL_COLOR: Record<LogLevel, string> = {
   unknown: 'text-slate-400',
 };
 
+// footer level 计数：顺序固定 error → unknown，颜色与 StatsPanel 旧值一致
+const FOOTER_LEVELS: LogLevel[] = ['error', 'warn', 'info', 'debug', 'trace', 'unknown'];
+const FOOTER_LEVEL_COLOR: Record<LogLevel, string> = {
+  error: 'text-red-700',
+  warn: 'text-amber-700',
+  info: 'text-blue-700',
+  debug: 'text-cyan-700',
+  trace: 'text-slate-700',
+  unknown: 'text-slate-500',
+};
+
 // 可拖动列：默认宽度 + 最小宽度
 type ColKey = 'line' | 'time' | 'level' | 'scope';
 const DEFAULT_WIDTHS: Record<ColKey, number> = {
@@ -262,8 +273,22 @@ export function LogList() {
             : '↓ 跳到底部'}
         </button>
       )}
-      <div className="px-3 py-1 text-xs text-slate-500 border-t bg-slate-50">
-        匹配 {result.total_matched.toLocaleString()} 条
+      <div className="flex items-center gap-3 px-3 py-1 text-xs border-t bg-slate-50 flex-wrap">
+        <span className="font-semibold text-slate-700">
+          匹配 {result.total_matched.toLocaleString()} 条
+        </span>
+        {FOOTER_LEVELS.map((lv) => {
+          const n = result.stats.level_counts[lv] ?? 0;
+          if (n === 0) return null;
+          return (
+            <span key={lv} className="flex items-center gap-2">
+              <span className="text-slate-300">·</span>
+              <span className={FOOTER_LEVEL_COLOR[lv]}>
+                {lv.toUpperCase()} {n.toLocaleString()}
+              </span>
+            </span>
+          );
+        })}
       </div>
     </div>
   );

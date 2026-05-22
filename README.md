@@ -7,7 +7,10 @@
 **最新视觉规范**：统一 28px 控件高度、Linear/Notion 风格、StatsPanel 瘦身、level 计数下沉到 footer。
 
 **核心能力**：
-- 6 种内置解析模板 + 自动嗅探 + 自定义模板（管理对话框 + 持久化）
+- 7 种内置解析模板（JSON Lines / bracket-electron / bracket-common / python-default / nginx-combined / logfmt / rfc3339-bracket）+ 自动嗅探 + 自定义模板（管理对话框 + 持久化）
+- JSON Lines 容忍 grep/tail 多文件拼接产生的前缀（`filename.log:{...}`）
+- Level 数字格式自动识别：winston/bunyan/pino（10/20/30/40/50）+ ×16 步进（0/16/32/48/64）
+- **Raw 模式 fallback**：嗅探完全 NoMatch 时表格塌成 "行号 + 原始内容" 单列，不强行编造空字段
 - 多行 entry 自动合并（如 electron-log 尾部 JSON 跨多行）
 - bracket-electron 同时支持 `[scope]` 和 `(scope)` 两种 scope 写法
 - 按级别 / scope（exact/glob/regex + Top scope 多选）/ 时间区间 / 关键词筛选
@@ -44,7 +47,7 @@ npm run tauri dev
 ## 测试
 
 ```bash
-cd src-tauri && cargo test     # 117 lib + 9 integration tests
+cd src-tauri && cargo test     # 124 lib + 9 integration tests
 npm test                       # 前端 vitest
 ```
 

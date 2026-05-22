@@ -78,6 +78,38 @@ impl PrefsStore {
     }
 }
 
+use crate::parser::regex_template::{FieldMap, RegexTemplate};
+use crate::parser::tail_parser::TailParserKind;
+use regex::Regex;
+
+/// 把持久化的 CustomTemplate 编译为可运行的 RegexTemplate
+pub fn compile_custom_template(c: &CustomTemplate) -> Result<RegexTemplate, AppError> {
+    let pattern = Regex::new(&c.pattern)
+        .map_err(|e| AppError::Parse(format!("pattern 编译失败：{e}")))?;
+    let start_pattern = Regex::new(&c.start_pattern)
+        .map_err(|e| AppError::Parse(format!("start_pattern 编译失败：{e}")))?;
+    let tail = match c.tail_parser.as_str() {
+        "none" => None,
+        "json_object" => Some(TailParserKind::JsonObject),
+        "json_like" => Some(TailParserKind::JsonLike),
+        other => return Err(AppError::Parse(format!("未知 tail_parser: {other}"))),
+    };
+    Ok(RegexTemplate {
+        id: c.id.clone(),
+        name: c.name.clone(),
+        pattern,
+        start_pattern,
+        time_formats: c.time_formats.clone(),
+        field_map: FieldMap {
+            timestamp: c.field_map.timestamp.clone(),
+            level: c.field_map.level.clone(),
+            scope: c.field_map.scope.clone(),
+            message: c.field_map.message.clone(),
+        },
+        tail,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -130,5 +162,37 @@ mod tests {
             .map(|e| e.file_name().to_string_lossy().to_string())
             .collect();
         assert!(entries.iter().any(|n| n.starts_with("prefs.json.bak.")));
+    }
+
+    #[test]
+    fn compile_custom_template_ok() {
+        let c = CustomTemplate {
+            id: "x".into(),
+            name: "X".into(),
+            pattern: r"^(?P<msg>.*)$".into(),
+            start_pattern: "^.".into(),
+            time_formats: vec![],
+            field_map: CustomFieldMap {
+                timestamp: None, level: None, scope: None, message: Some("msg".into()),
+            },
+            tail_parser: "json_like".into(),
+        };
+        let rt = compile_custom_template(&c).unwrap();
+        assert_eq!(rt.id, "x");
+        assert!(rt.tail.is_some());
+    }
+
+    #[test]
+    fn compile_custom_template_rejects_bad_regex() {
+        let c = CustomTemplate {
+            id: "x".into(), name: "X".into(),
+            pattern: "[invalid".into(),
+            start_pattern: "^".into(),
+            time_formats: vec![],
+            field_map: CustomFieldMap { timestamp: None, level: None, scope: None, message: None },
+            tail_parser: "none".into(),
+        };
+        let r = compile_custom_template(&c);
+        assert!(matches!(r, Err(AppError::Parse(_))));
     }
 }

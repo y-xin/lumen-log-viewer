@@ -5,6 +5,7 @@ pub mod error;
 pub mod loader;
 pub mod model;
 pub mod parser;
+pub mod prefs;
 pub mod query;
 pub mod session;
 pub mod stats;

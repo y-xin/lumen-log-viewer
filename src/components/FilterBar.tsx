@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSession } from '../state/session';
 import type { LogLevel, MatchMode } from '../types/log';
+import { ExportMenu } from './ExportMenu';
 
 const LEVELS: LogLevel[] = ['trace', 'debug', 'info', 'warn', 'error', 'unknown'];
 const LEVEL_COLOR: Record<LogLevel, string> = {
@@ -95,6 +96,7 @@ export function FilterBar() {
             {lv}
           </button>
         ))}
+        <div className="ml-auto"><ExportMenu /></div>
       </div>
 
       <div className="flex items-center gap-2 text-sm">

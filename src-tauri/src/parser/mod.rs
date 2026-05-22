@@ -6,6 +6,7 @@ pub mod grouping;
 pub mod tail_parser;
 pub mod regex_template;
 pub mod registry;
+pub mod sniff;
 
 use crate::model::{FileMetadata, LogEntry, LogLevel};
 use grouping::group_records;

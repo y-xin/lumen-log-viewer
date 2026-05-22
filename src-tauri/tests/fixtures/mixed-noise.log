@@ -1,0 +1,6 @@
+[2026-05-22 09:00:00.000] [info] (auth) hello
+[2026-05-22 09:00:01.000] [warn] (db) slow
+[2026-05-22 09:00:02.000] [error] (auth) failed
+random garbage line that matches nothing
+another garbage line
+[2026-05-22 09:00:05.000] [info] (http) recovered

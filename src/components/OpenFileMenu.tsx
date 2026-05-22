@@ -3,8 +3,8 @@
 // - 右半"▾"：下拉显示最近文件 → 点选直接打开
 
 import { useEffect, useState } from 'react';
-import { open } from '@tauri-apps/plugin-dialog';
 import { openFile, listRecentFiles, clearRecentFiles } from '../api/commands';
+import { openFileViaDialog } from '../api/dialog';
 import { useSession } from '../state/session';
 
 function formatPath(p: string): { name: string; dir: string } {
@@ -43,14 +43,7 @@ export function OpenFileMenu() {
     }
   };
 
-  const handleOpenDialog = async () => {
-    setError(null);
-    const selected = await open({
-      multiple: false,
-      filters: [{ name: 'Log', extensions: ['log', 'jsonl', 'txt'] }],
-    });
-    if (typeof selected === 'string') await loadByPath(selected);
-  };
+  const handleOpenDialog = () => openFileViaDialog({ loadFile, setLoading, setError });
 
   const handleClear = async () => {
     if (!confirm('清除最近打开列表？')) return;

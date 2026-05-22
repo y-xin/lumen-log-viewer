@@ -6,7 +6,7 @@ use crate::loader::{incremental::IncrementalParser, watcher::{FileWatcher, Rotat
 use crate::model::{FileMetadata, LogEntry, Stats};
 use crate::parser;
 use crate::parser::registry::Registry;
-use crate::prefs::{CustomTemplate, PrefsStore};
+use crate::prefs::{CustomTemplate, PrefsStore, SavedFilter};
 use crate::query::{self, QuerySpec};
 use crate::session::SessionState;
 use crate::stats;
@@ -366,4 +366,42 @@ pub fn cmd_export(
     w.flush().map_err(|e| AppError::Io(format!("flush 失败：{e}")))?;
     let bytes_written = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
     Ok(ExportResult { count: matched.len() as u32, bytes_written })
+}
+
+// ─── Saved Filters ───
+
+#[tauri::command]
+pub fn cmd_list_saved_filters(
+    prefs_store: State<'_, PrefsStore>,
+    file_path: String,
+) -> Vec<SavedFilter> {
+    prefs_store.list_filters(&file_path)
+}
+
+#[tauri::command]
+pub fn cmd_save_filter(
+    prefs_store: State<'_, PrefsStore>,
+    file_path: String,
+    filter: SavedFilter,
+) -> Result<Vec<SavedFilter>, AppError> {
+    prefs_store.save_filter(&file_path, filter)
+}
+
+#[tauri::command]
+pub fn cmd_delete_saved_filter(
+    prefs_store: State<'_, PrefsStore>,
+    file_path: String,
+    id: String,
+) -> Result<Vec<SavedFilter>, AppError> {
+    prefs_store.delete_filter(&file_path, &id)
+}
+
+#[tauri::command]
+pub fn cmd_rename_saved_filter(
+    prefs_store: State<'_, PrefsStore>,
+    file_path: String,
+    id: String,
+    new_name: String,
+) -> Result<Vec<SavedFilter>, AppError> {
+    prefs_store.rename_filter(&file_path, &id, &new_name)
 }

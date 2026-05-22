@@ -12,6 +12,7 @@ import type {
   TestResult,
   ExportFormat,
   ExportResult,
+  SavedFilter,
 } from '../types/log';
 
 /** 序列化 QuerySpec 时 levels / scope_in 由数组转为后端可接受形态 */
@@ -87,4 +88,26 @@ export async function exportToFile(
     format,
     path,
   });
+}
+
+// ─── Saved Filters ───
+
+export async function listSavedFilters(filePath: string): Promise<SavedFilter[]> {
+  return invoke<SavedFilter[]>('cmd_list_saved_filters', { filePath });
+}
+
+export async function saveFilter(filePath: string, filter: SavedFilter): Promise<SavedFilter[]> {
+  return invoke<SavedFilter[]>('cmd_save_filter', { filePath, filter });
+}
+
+export async function deleteSavedFilter(filePath: string, id: string): Promise<SavedFilter[]> {
+  return invoke<SavedFilter[]>('cmd_delete_saved_filter', { filePath, id });
+}
+
+export async function renameSavedFilter(
+  filePath: string,
+  id: string,
+  newName: string,
+): Promise<SavedFilter[]> {
+  return invoke<SavedFilter[]>('cmd_rename_saved_filter', { filePath, id, newName });
 }

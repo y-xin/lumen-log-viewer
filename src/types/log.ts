@@ -37,10 +37,17 @@ export interface FileMetadata {
   template_id: string;
 }
 
+export interface TimeBucket {
+  bucket_start: string;          // RFC3339
+  total: number;
+  by_level: Partial<Record<LogLevel, number>>;
+}
+
 export interface Stats {
   total: number;
   level_counts: Partial<Record<LogLevel, number>>;
   top_scopes: [string, number][];
+  time_buckets: TimeBucket[];     // NEW
 }
 
 export interface QueryResponse {

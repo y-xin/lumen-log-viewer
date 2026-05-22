@@ -14,6 +14,8 @@ import { useTailFollow } from './hooks/useTailFollow';
 import { useTailStatsRefresh } from './hooks/useTailStatsRefresh';
 import { useFileDrop } from './hooks/useFileDrop';
 import { useAutoOpenRecent } from './hooks/useAutoOpenRecent';
+import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
+import { ShortcutsHelp } from './components/ShortcutsHelp';
 
 export default function App() {
   const { metadata, loading, error } = useSession();
@@ -22,6 +24,7 @@ export default function App() {
   useTailFollow();
   useTailStatsRefresh();
   useAutoOpenRecent();
+  useGlobalShortcuts();
   const isDragging = useFileDrop();
 
   return (
@@ -49,6 +52,7 @@ export default function App() {
       {showManager && <TemplateManagerDialog onClose={() => setShowManager(false)} />}
       <DetailDrawer />
       <RotationDialog />
+      <ShortcutsHelp />
 
       {/* 拖拽文件 overlay：覆盖整个窗口，不阻挡 drag-leave/drop 事件传播 */}
       {isDragging && (

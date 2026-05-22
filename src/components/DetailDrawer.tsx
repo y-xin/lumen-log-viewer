@@ -3,11 +3,9 @@
 //      避免几万行后的行因不在首页就找不到。
 
 import { useSession } from '../state/session';
-import { useKeyboardNav } from '../hooks/useKeyboardNav';
 
 export function DetailDrawer() {
   const { selectedEntry, setSelectedEntry, patchSpec } = useSession();
-  useKeyboardNav();
 
   if (!selectedEntry) return null;
   const entry = selectedEntry;

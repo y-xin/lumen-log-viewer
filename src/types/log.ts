@@ -19,6 +19,7 @@ export interface QuerySpec {
 
 export interface LogEntry {
   line_no: number;
+  line_count: number;
   timestamp: string | null;
   level: LogLevel;
   scope: string | null;

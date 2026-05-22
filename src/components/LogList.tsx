@@ -62,7 +62,9 @@ export function LogList() {
     }
     return (
       <div style={style} className="px-2 text-xs flex items-center gap-3 font-mono border-b border-slate-100">
-        <span className="text-slate-400 w-12 text-right">#{e.line_no}</span>
+        <span className="text-slate-400 w-16 text-right">
+          {e.line_count > 1 ? `#${e.line_no}-${e.line_no + e.line_count - 1}` : `#${e.line_no}`}
+        </span>
         <span className="text-slate-500 w-40 truncate">{e.timestamp ?? '-'}</span>
         <span className={['w-12 uppercase', LEVEL_COLOR[e.level]].join(' ')}>{e.level}</span>
         <span className="text-slate-600 w-32 truncate">[{e.scope ?? '-'}]</span>

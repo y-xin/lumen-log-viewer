@@ -87,13 +87,13 @@ export function OpenFileMenu() {
                   key={p}
                   onClick={() => loadByPath(p)}
                   className={[
-                    'w-full text-left px-3 py-1.5 hover:bg-slate-100 flex flex-col',
+                    'w-full text-left px-3 py-1.5 hover:bg-slate-100 flex flex-col min-w-0 overflow-hidden',
                     isCurrent ? 'bg-blue-50' : '',
                   ].join(' ')}
                   title={p}
                 >
-                  <span className="text-slate-800 truncate">{isCurrent ? '✓ ' : ''}{name}</span>
-                  <span className="text-slate-400 text-xs truncate">{dir}</span>
+                  <span className="text-slate-800 truncate block max-w-full">{isCurrent ? '✓ ' : ''}{name}</span>
+                  <span className="text-slate-400 text-xs truncate block max-w-full">{dir}</span>
                 </button>
               );
             })}

@@ -36,6 +36,18 @@ export function TemplateManagerDialog({ onClose }: Props) {
   };
   useEffect(() => { refresh(); }, []);
 
+  // Esc 关闭本对话框（useGlobalShortcuts 的 Esc 优先级不管这里，因为 open state 在 App.tsx 局部）
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onClose]);
+
   const startNew = () => {
     setEditing(EMPTY_TEMPLATE);
     setTestResult(null);

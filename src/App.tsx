@@ -12,12 +12,14 @@ import { RotationDialog } from './components/RotationDialog';
 import { useSession } from './state/session';
 import { useAutoQuery } from './hooks/useAutoQuery';
 import { useTailFollow } from './hooks/useTailFollow';
+import { useFileDrop } from './hooks/useFileDrop';
 
 export default function App() {
   const { metadata, loading, error } = useSession();
   const [showManager, setShowManager] = useState(false);
   useAutoQuery();
   useTailFollow();
+  const isDragging = useFileDrop();
 
   return (
     <div className="h-screen flex flex-col bg-slate-50 text-slate-900">
@@ -47,6 +49,16 @@ export default function App() {
       {showManager && <TemplateManagerDialog onClose={() => setShowManager(false)} />}
       <DetailDrawer />
       <RotationDialog />
+
+      {/* 拖拽文件 overlay：覆盖整个窗口，不阻挡 drag-leave/drop 事件传播 */}
+      {isDragging && (
+        <div className="fixed inset-0 z-50 pointer-events-none flex items-center justify-center bg-blue-500/20 border-4 border-dashed border-blue-500">
+          <div className="bg-white rounded-lg shadow-xl px-6 py-4 text-center">
+            <div className="text-3xl mb-1">📂</div>
+            <div className="text-sm font-medium text-slate-700">松开鼠标打开日志文件</div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

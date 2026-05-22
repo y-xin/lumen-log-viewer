@@ -80,30 +80,35 @@ export const useSession = create<SessionStore>((set) => ({
   }),
   setSpec: (spec) => set({ spec }),
   patchSpec: (p) => set((s) => ({ spec: { ...s.spec, ...p } })),
-  setResult: (result) => set({ result }),
+  setResult: (result) => set((s) => {
+    // follow 模式下：根据 total_matched 增量计算 newEntriesPending
+    // （tail-follow 重新查询后，本次 matched 总数 - 上次 matched 总数 = 这次过滤后的"新条目"）
+    let pending = s.newEntriesPending;
+    if (s.follow && result && s.result) {
+      const delta = result.total_matched - s.result.total_matched;
+      if (delta > 0) pending += delta;
+    }
+    return { result, newEntriesPending: pending };
+  }),
   setLoading: (loading) => set({ loading }),
   setError: (error) => set({ error }),
   setTemplates: (templates) => set({ templates }),
   setSelectedEntry: (e) => set({ selectedEntry: e }),
   setFollow: (b) => set({ follow: b }),
   setRotationKind: (k) => set({ rotationKind: k }),
-  appendEntries: (newEntries, total) => set((s) => {
-    if (!s.result) {
-      return {
-        metadata: s.metadata ? { ...s.metadata, total } : s.metadata,
-        newEntriesPending: s.newEntriesPending + newEntries.length,
-      };
-    }
-    return {
-      result: {
-        ...s.result,
-        total_matched: s.result.total_matched + newEntries.length,
-        page_entries: [...s.result.page_entries, ...newEntries],
-      },
-      metadata: s.metadata ? { ...s.metadata, total } : s.metadata,
-      newEntriesPending: s.newEntriesPending + newEntries.length,
-    };
-  }),
+  /**
+   * tail-follow 收到新条目后调用：仅更新 metadata.total（文件原始行数）。
+   * result 由 useTailFollow 内的 debounced re-query 静默刷新，
+   * setResult 会按 total_matched 差额自动累加 newEntriesPending。
+   *
+   * 旧实现把所有 newEntries 直接 push 到 page_entries 并累加计数，无视当前 spec —
+   * 是 README 已知 bug "tail 追加的新条目不走 spec filter"。
+   *
+   * newEntries 参数保留兼容（后端事件还在发，但前端不再直接消费）。
+   */
+  appendEntries: (_newEntries, total) => set((s) => ({
+    metadata: s.metadata ? { ...s.metadata, total } : s.metadata,
+  })),
   clearNewEntriesPending: () => set({ newEntriesPending: 0 }),
   setHelpOpen: (helpOpen) => set({ helpOpen }),
 }));

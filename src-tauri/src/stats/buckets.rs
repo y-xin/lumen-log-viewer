@@ -1,6 +1,6 @@
 // 时间桶聚合：把 entries 按时间均匀分到 N 个桶，每桶含 total + by_level
 
-use crate::model::{LogEntry, LogLevel, TimeBucket};
+use crate::model::{LogEntry, TimeBucket};
 use chrono::{DateTime, Duration, Utc};
 use std::collections::HashMap;
 

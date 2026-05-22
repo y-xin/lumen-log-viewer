@@ -2,7 +2,7 @@
 
 桌面 GUI 日志查看与分析工具（Tauri + React + TypeScript）。
 
-## 当前状态：Plan 2b + Export + Style v3 + Saved Filters + Shortcuts + Detail Nav + Overnight (8 features) 已完成
+## 当前状态：Plan 2b + Export + Style v3 + Saved Filters + Shortcuts + Detail Nav + Overnight (13 features) 已完成
 
 **最新视觉规范**：统一 28px 控件高度、Linear/Notion 风格、StatsPanel 瘦身、level 计数下沉到 footer。
 
@@ -28,6 +28,11 @@
 - **解析嗅探质量提示**：自动嗅探不确定时（confidence < 0.8）顶部黄/红条提示切模板
 - **关键词 regex 模式**：FilterBar 关键词框旁 `.Rx` 切换，正则非法时输入框红边框（不阻塞，后端静默放行）
 - **错误边界**：根级 React ErrorBoundary，崩溃后给 "尝试恢复 / 重新加载" 卡片（dev 模式带 stack trace）
+- **drawer 单条复制 / 导出**：详情抽屉 Raw 区三按钮 — 复制 raw / 复制为 JSON / 导出 entry-{N}.json
+- **跨页跳行 ⌘G**：弹小对话框输入文件原始行号 → LogList scrollToItem 居中
+- **scope 字段任意化**：scope filter 字段名输入支持自由文本 + 常见结构化字段 datalist 补全（request_id / trace_id 等）
+- **scope 值自动补全**：exact 模式下 scope 输入框 datalist 提示当前文件出现过的所有 scope
+- **drawer 导航同步滚动**：抽屉 ↑/↓ 切换 entry 时 LogList 自动居中到对应行
 
 ## 开发
 

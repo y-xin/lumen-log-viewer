@@ -1,6 +1,6 @@
 # 早晨验收清单 (2026-05-23 凌晨自主推进结果)
 
-夜间自主完成 3 个 feature。所有改动都过了 `cargo test` (115+) 与 `npm test` (11)、`npm run build` 干净。
+夜间自主完成 13 个 feature。所有改动都过了 `cargo test` (117) 与 `npm test` (11)、`npm run build` 干净。
 
 ## 改动一览
 
@@ -81,6 +81,45 @@ FilterBar 关键词框旁 `.Rx` 按钮切换 substring（默认）/ regex 模式
 - [ ] 打开 .Rx → 输 `error|warn` → 同时匹配两种 level 词
 - [ ] 输 `[unclosed` → 输入框红边框，结果不变（fallback "无 text filter"）
 - [ ] 关 .Rx → 回 substring，前面输入还原工作
+
+### K. drawer 单条复制 / 导出 (commit `c7f2c28`)
+
+DetailDrawer Raw 区右侧三按钮：📋 raw（原文）/ 📋 JSON（整个 entry 序列化）/ 💾 导出（`entry-{lineNo}.json` 落到默认下载目录）。
+
+**验收**
+- [ ] 选中行 → 详情 Raw 区点 📋 JSON → 粘贴别处看到 pretty JSON
+- [ ] 点 💾 导出 → 下载得到 `entry-{N}.json`，内容是 entry 完整对象
+
+### L. ⌘G 跳到行号 (commit `ed7bc2b`)
+
+`⌘G` 弹小模态 → 输文件原始行号 → 回车 → LogList `scrollToItem('center')` 到匹配的 entry。行号不在当前 matched 集时静默关闭（提示用户清筛选）。Esc 关闭。
+
+**验收**
+- [ ] `⌘G` 弹框 → 输 100 → 回车 → 列表滚到 100 行附近
+- [ ] 当前筛选只剩 ERROR 时输 INFO 行号 → 列表不滚（行不在集里）
+
+### J. scope 字段任意化 (commit `b68d381`)
+
+ScopeFilter 字段名输入从 `<select>` 改 `<input list="...">` + datalist 提示常见结构化字段（request_id / trace_id / span_id / user_id / session_id / service / logger / thread）。后端早就支持任意 `entry.fields[name]` 匹配，这是 UI 解锁。
+
+**验收**
+- [ ] 字段名输入框点击 → 弹出 8 个常见字段下拉
+- [ ] 输 `request_id` + 任意 pattern → 后端按 `entry.fields["request_id"]` 匹配
+
+### M. drawer ↑/↓ 同步滚动 LogList (commit `8b1db44`)
+
+抽屉头部 ↑/↓ 按钮切 entry 时，复用 `lv:goto-line` 事件让 LogList 居中到新 entry。避免用户跨页导航后 "丢失" 列表上下文。
+
+**验收**
+- [ ] 选中行 → drawer ↑↓ → 列表跟着滚到新选中行的位置（center）
+
+### N. scope 值自动补全 (commit `33caedb`)
+
+`mode='exact'` + `field='scope'` 时，scope pattern input 给 datalist，列出当前文件所有 scope 名（按字母排序）。其他 mode（glob/regex）不给（提示干扰 pattern 输入）。
+
+**验收**
+- [ ] 选 exact 模式 → scope pattern 输入框点击 → 弹出文件已知 scope 下拉
+- [ ] 切到 glob/regex → 下拉消失（不干扰 pattern 输入）
 
 ### C. 列宽持久化 (commit `1e24241`)
 

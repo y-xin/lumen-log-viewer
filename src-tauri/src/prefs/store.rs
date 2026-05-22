@@ -33,7 +33,13 @@ pub struct CustomFieldMap {
 pub struct Prefs {
     pub version: u32,
     pub custom_templates: Vec<CustomTemplate>,
+    /// 最近打开过的文件路径，最新的在前，最多保留 MAX_RECENT_FILES 个。
+    /// 不存在/不可访问的路径在 list 时由前端忽略，文件内保留。
+    #[serde(default)]
+    pub recent_files: Vec<String>,
 }
+
+const MAX_RECENT_FILES: usize = 10;
 
 pub struct PrefsStore {
     path: PathBuf,
@@ -54,7 +60,7 @@ impl PrefsStore {
 
     pub fn load(&self) -> Prefs {
         if !self.path.exists() {
-            return Prefs { version: 1, custom_templates: vec![] };
+            return Prefs::default_v1();
         }
         match fs::read_to_string(&self.path) {
             Ok(s) => match serde_json::from_str::<Prefs>(&s) {
@@ -63,10 +69,10 @@ impl PrefsStore {
                     let ts = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
                     let bak = self.path.with_extension(format!("json.bak.{}", ts));
                     let _ = fs::rename(&self.path, &bak);
-                    Prefs { version: 1, custom_templates: vec![] }
+                    Prefs::default_v1()
                 }
             }
-            Err(_) => Prefs { version: 1, custom_templates: vec![] },
+            Err(_) => Prefs::default_v1(),
         }
     }
 
@@ -75,6 +81,33 @@ impl PrefsStore {
             .map_err(|e| AppError::Internal(format!("序列化 prefs 失败：{e}")))?;
         fs::write(&self.path, s)?;
         Ok(())
+    }
+
+    /// 把 path 移到 recent_files 队首，去重并截断到 MAX_RECENT_FILES。
+    pub fn record_recent(&self, path: &str) -> Result<(), AppError> {
+        let mut prefs = self.load();
+        prefs.recent_files.retain(|p| p != path);
+        prefs.recent_files.insert(0, path.to_string());
+        if prefs.recent_files.len() > MAX_RECENT_FILES {
+            prefs.recent_files.truncate(MAX_RECENT_FILES);
+        }
+        self.save(&prefs)
+    }
+
+    pub fn list_recent(&self) -> Vec<String> {
+        self.load().recent_files
+    }
+
+    pub fn clear_recent(&self) -> Result<(), AppError> {
+        let mut prefs = self.load();
+        prefs.recent_files.clear();
+        self.save(&prefs)
+    }
+}
+
+impl Prefs {
+    fn default_v1() -> Self {
+        Prefs { version: 1, custom_templates: vec![], recent_files: vec![] }
     }
 }
 
@@ -143,11 +176,49 @@ mod tests {
     fn save_and_load_roundtrip() {
         let dir = tempdir().unwrap();
         let store = PrefsStore::at(dir.path().join("prefs.json"));
-        let prefs = Prefs { version: 1, custom_templates: vec![sample_template()] };
+        let prefs = Prefs {
+            version: 1,
+            custom_templates: vec![sample_template()],
+            recent_files: vec![],
+        };
         store.save(&prefs).unwrap();
         let loaded = store.load();
         assert_eq!(loaded.custom_templates.len(), 1);
         assert_eq!(loaded.custom_templates[0].id, "test");
+    }
+
+    #[test]
+    fn record_recent_dedupes_and_moves_to_front() {
+        let dir = tempdir().unwrap();
+        let store = PrefsStore::at(dir.path().join("prefs.json"));
+        store.record_recent("/a.log").unwrap();
+        store.record_recent("/b.log").unwrap();
+        store.record_recent("/c.log").unwrap();
+        store.record_recent("/a.log").unwrap();   // 再开 /a.log → 移到队首
+        let r = store.list_recent();
+        assert_eq!(r, vec!["/a.log".to_string(), "/c.log".to_string(), "/b.log".to_string()]);
+    }
+
+    #[test]
+    fn record_recent_truncates_to_max() {
+        let dir = tempdir().unwrap();
+        let store = PrefsStore::at(dir.path().join("prefs.json"));
+        for i in 0..15 {
+            store.record_recent(&format!("/f{}.log", i)).unwrap();
+        }
+        let r = store.list_recent();
+        assert_eq!(r.len(), MAX_RECENT_FILES);
+        // 最新的在前
+        assert_eq!(r[0], "/f14.log");
+    }
+
+    #[test]
+    fn clear_recent_empties_list() {
+        let dir = tempdir().unwrap();
+        let store = PrefsStore::at(dir.path().join("prefs.json"));
+        store.record_recent("/a.log").unwrap();
+        store.clear_recent().unwrap();
+        assert!(store.list_recent().is_empty());
     }
 
     #[test]

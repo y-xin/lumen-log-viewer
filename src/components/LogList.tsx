@@ -1,8 +1,10 @@
 // 虚拟列表：滚动到第 N 页边界时按需 fetch 下一页
-// MVP 简化：仅显示已 fetch 的条目；用 FixedSizeList 表达“占位高度 = total_matched”
+// MVP 简化：仅显示已 fetch 的条目；用 FixedSizeList 表达"占位高度 = total_matched"
 // 增强：跟踪滚动位置；新条目到达时若在底部则自动滚动，否则显示"↓N 条新日志"悬浮按钮
+// 高度：用 ResizeObserver 测量容器实际大小（避免硬编码 innerHeight - 280 在 sparkline
+//       折叠 / 窗口缩放 / 不同 header 高度下算错而切掉底部行）
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { FixedSizeList as List, ListChildComponentProps, ListOnScrollProps } from 'react-window';
 import { getPage } from '../api/commands';
 import { useSession } from '../state/session';
@@ -11,6 +13,7 @@ import type { LogEntry, LogLevel } from '../types/log';
 const PAGE_SIZE = 200;
 const ROW_HEIGHT = 28;
 const BOTTOM_THRESHOLD = 20;
+const STATUS_BAR_HEIGHT = 28; // 底部"匹配 N 条"行
 
 const LEVEL_COLOR: Record<LogLevel, string> = {
   error: 'text-red-700',
@@ -21,10 +24,6 @@ const LEVEL_COLOR: Record<LogLevel, string> = {
   unknown: 'text-slate-400',
 };
 
-function listHeight() {
-  return Math.max(0, window.innerHeight - 280);
-}
-
 export function LogList() {
   const { spec, result, selectedLineNo, setSelectedLineNo, newEntriesPending, clearNewEntriesPending } = useSession();
   // 全局条目缓冲：index → entry；空槽未加载
@@ -33,6 +32,22 @@ export function LogList() {
   const seq = useRef(0);
   const listRef = useRef<List | null>(null);
   const atBottomRef = useRef(true);
+
+  // 实际可用高度（由 ResizeObserver 测量外层 div）
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [containerHeight, setContainerHeight] = useState(0);
+
+  useLayoutEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const update = () => setContainerHeight(el.clientHeight);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const listH = Math.max(0, containerHeight - STATUS_BAR_HEIGHT);
 
   // spec 或文件变化时重置 + 注入首页；若用户处于底部，新结果到达后自动滚到末尾
   useEffect(() => {
@@ -67,7 +82,7 @@ export function LogList() {
 
   const onScroll = ({ scrollOffset }: ListOnScrollProps) => {
     if (!result) return;
-    const maxScroll = result.total_matched * ROW_HEIGHT - listHeight();
+    const maxScroll = result.total_matched * ROW_HEIGHT - listH;
     atBottomRef.current = (maxScroll - scrollOffset) < BOTTOM_THRESHOLD;
     if (atBottomRef.current && newEntriesPending > 0) {
       clearNewEntriesPending();
@@ -112,21 +127,24 @@ export function LogList() {
   const showFloating = newEntriesPending > 0 && !atBottomRef.current;
 
   return (
-    <div className="flex-1 overflow-hidden relative">
-      <List
-        ref={listRef}
-        height={listHeight()}
-        itemCount={result.total_matched}
-        itemSize={ROW_HEIGHT}
-        width="100%"
-        onScroll={onScroll}
-      >
-        {Row}
-      </List>
+    <div ref={containerRef} className="flex-1 overflow-hidden relative">
+      {listH > 0 && (
+        <List
+          ref={listRef}
+          height={listH}
+          itemCount={result.total_matched}
+          itemSize={ROW_HEIGHT}
+          width="100%"
+          onScroll={onScroll}
+        >
+          {Row}
+        </List>
+      )}
       {showFloating && (
         <button
           onClick={jumpToBottom}
-          className="absolute bottom-8 right-6 px-3 py-1.5 bg-blue-600 text-white text-xs rounded-full shadow-lg hover:bg-blue-700"
+          className="absolute right-6 px-3 py-1.5 bg-blue-600 text-white text-xs rounded-full shadow-lg hover:bg-blue-700"
+          style={{ bottom: STATUS_BAR_HEIGHT + 16 }}
         >
           ↓ {newEntriesPending.toLocaleString()} 条新日志
         </button>

@@ -66,3 +66,11 @@ export async function startFollow(): Promise<void> {
 export async function stopFollow(): Promise<void> {
   return invoke<void>('cmd_stop_follow');
 }
+
+export async function listRecentFiles(): Promise<string[]> {
+  return invoke<string[]>('cmd_list_recent_files');
+}
+
+export async function clearRecentFiles(): Promise<void> {
+  return invoke<void>('cmd_clear_recent_files');
+}

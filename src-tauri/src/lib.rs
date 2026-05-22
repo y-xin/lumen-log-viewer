@@ -42,6 +42,8 @@ pub fn run() {
             commands::cmd_test_template,
             commands::cmd_start_follow,
             commands::cmd_stop_follow,
+            commands::cmd_list_recent_files,
+            commands::cmd_clear_recent_files,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

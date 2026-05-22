@@ -50,12 +50,25 @@ pub fn cmd_open_file(
     path: String,
     state: State<'_, SessionState>,
     registry: State<'_, Registry>,
+    prefs_store: State<'_, PrefsStore>,
 ) -> Result<FileMetadata, AppError> {
     let lines = reader::read_all_lines(Path::new(&path))?;
     let (entries, template_id) = parser::parse_with_sniff(&registry, &lines);
     let metadata = parser::compute_metadata(&path, &entries, &template_id);
     state.load_with_lines(metadata.clone(), entries, lines);
+    // 成功后记录到最近文件（失败不阻塞）
+    let _ = prefs_store.record_recent(&path);
     Ok(metadata)
+}
+
+#[tauri::command]
+pub fn cmd_list_recent_files(prefs_store: State<'_, PrefsStore>) -> Vec<String> {
+    prefs_store.list_recent()
+}
+
+#[tauri::command]
+pub fn cmd_clear_recent_files(prefs_store: State<'_, PrefsStore>) -> Result<(), AppError> {
+    prefs_store.clear_recent()
 }
 
 #[tauri::command]

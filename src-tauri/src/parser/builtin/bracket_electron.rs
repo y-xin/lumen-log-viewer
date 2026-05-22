@@ -1,6 +1,9 @@
 // bracket-electron 模板：Electron 应用 (electron-log) 风格
 // 样例 A：[2026-05-21 17:26:37.566] [info] (main/network-manager) message {fields...}
-// 样例 B：[2026-05-22 10:41:22.203] [info] [app-update] message {fields...}
+// 样例 B：[2026-05-22 10:41:22.203] [info]  [app-update] message {fields...}
+//                                         ^^ 注意：electron-log 把 level 右对齐到固定宽度，
+//                                         所以短 level（info/warn）后会有 padding 空格。
+//                                         分隔符统一用 \s+ 容忍 1 或多个空格。
 // scope 同时接受圆括号 (name) 与方括号 [name]
 
 use crate::parser::regex_template::{FieldMap, RegexTemplate};
@@ -12,7 +15,7 @@ pub fn template() -> RegexTemplate {
         id: "bracket-electron".into(),
         name: "Bracket (Electron)".into(),
         pattern: Regex::new(
-            r"^\[(?P<ts>[^\]]+)\] \[(?P<level>[^\]]+)\] [\[\(](?P<scope>[^\]\)]+)[\]\)] (?P<message>.*)$"
+            r"^\[(?P<ts>[^\]]+)\]\s+\[(?P<level>[^\]]+)\]\s+[\[\(](?P<scope>[^\]\)]+)[\]\)]\s+(?P<message>.*)$"
         ).unwrap(),
         start_pattern: Regex::new(r"^\[\d{4}-\d{2}-\d{2}[ T]").unwrap(),
         time_formats: vec![
@@ -108,5 +111,16 @@ mod tests {
         assert_eq!(r.scope.as_deref(), Some("app-update"));
         assert_eq!(r.message, "check error");
         assert_eq!(r.fields.get("code").map(String::as_str), Some("network failed"));
+    }
+
+    #[test]
+    fn parses_with_padded_level_double_space() {
+        // electron-log 把 level 右对齐到 5 字符宽，所以 [info] 后是双空格才到 [scope]
+        let t = template();
+        let raw = "[2026-05-22 10:41:22.203] [info]  [app-update] service started";
+        let r = t.parse_record(&[raw.to_string()]).unwrap();
+        assert_eq!(r.level, LogLevel::Info);
+        assert_eq!(r.scope.as_deref(), Some("app-update"));
+        assert_eq!(r.message, "service started");
     }
 }

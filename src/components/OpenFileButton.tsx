@@ -5,7 +5,7 @@ import { openFile } from '../api/commands';
 import { useSession } from '../state/session';
 
 export function OpenFileButton() {
-  const { setMetadata, setError, setLoading, setResult } = useSession();
+  const { loadFile, setError, setLoading } = useSession();
 
   const handle = async () => {
     setError(null);
@@ -16,9 +16,8 @@ export function OpenFileButton() {
     if (typeof selected !== 'string') return;
     try {
       setLoading(true);
-      setResult(null);
       const md = await openFile(selected);
-      setMetadata(md);
+      loadFile(md);   // 重置 spec / result / 选中行
     } catch (e) {
       const msg = typeof e === 'string' ? e : JSON.stringify(e);
       setError(`打开失败：${msg}`);

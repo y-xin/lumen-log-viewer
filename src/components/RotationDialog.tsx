@@ -10,7 +10,7 @@ const MESSAGES: Record<string, string> = {
 };
 
 export function RotationDialog() {
-  const { rotationKind, setRotationKind, metadata, setMetadata, setError } = useSession();
+  const { rotationKind, setRotationKind, metadata, loadFile, setError } = useSession();
   if (!rotationKind) return null;
 
   const msg = MESSAGES[rotationKind] ?? `检测到文件变化：${rotationKind}`;
@@ -20,7 +20,7 @@ export function RotationDialog() {
     if (!metadata) return;
     try {
       const md = await openFile(metadata.path);
-      setMetadata(md);
+      loadFile(md);   // 重置 spec — 轮转后旧 scope/keyword 上下文可能失效
       setRotationKind(null);
     } catch (e) {
       setError(typeof e === 'string' ? e : JSON.stringify(e));

@@ -19,6 +19,12 @@ interface SessionStore {
   rotationKind: string | null;
   newEntriesPending: number;
 
+  /**
+   * 打开新文件用：把 metadata 写入，同时清空 spec / result / 选中行 / 待追加计数。
+   * follow toggle 状态保留（用户开着跟踪打开下一个文件，期望仍然在跟踪）。
+   */
+  loadFile: (m: FileMetadata) => void;
+  /** 更新 metadata 但保留 spec（用于模板切换、tail-follow 后刷 metadata 等）。 */
   setMetadata: (m: FileMetadata | null) => void;
   setSpec: (s: QuerySpec) => void;
   patchSpec: (p: Partial<QuerySpec>) => void;
@@ -48,6 +54,16 @@ export const useSession = create<SessionStore>((set) => ({
   rotationKind: null,
   newEntriesPending: 0,
 
+  loadFile: (m) => set({
+    metadata: m,
+    currentTemplateId: m.template_id,
+    selectedLineNo: null,
+    newEntriesPending: 0,
+    spec: { levels: ALL_LEVELS },
+    result: null,
+    error: null,
+    rotationKind: null,
+  }),
   setMetadata: (m) => set({
     metadata: m,
     currentTemplateId: m?.template_id ?? null,

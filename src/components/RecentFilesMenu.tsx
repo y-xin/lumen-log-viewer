@@ -6,7 +6,7 @@ import { listRecentFiles, clearRecentFiles, openFile } from '../api/commands';
 import { useSession } from '../state/session';
 
 export function RecentFilesMenu() {
-  const { setMetadata, setError, setLoading, setResult, metadata } = useSession();
+  const { loadFile, setError, setLoading, metadata } = useSession();
   const [open, setOpen] = useState(false);
   const [recent, setRecent] = useState<string[]>([]);
 
@@ -27,9 +27,8 @@ export function RecentFilesMenu() {
     setError(null);
     try {
       setLoading(true);
-      setResult(null);
       const md = await openFile(path);
-      setMetadata(md);
+      loadFile(md);   // 重置 spec / result / 选中行
     } catch (e) {
       const msg = typeof e === 'string' ? e : JSON.stringify(e);
       setError(`打开失败：${msg}`);

@@ -14,7 +14,7 @@ function isLogPath(path: string): boolean {
 }
 
 export function useFileDrop(): boolean {
-  const { setMetadata, setError, setLoading, setResult } = useSession();
+  const { loadFile, setError, setLoading } = useSession();
   const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
@@ -24,9 +24,8 @@ export function useFileDrop(): boolean {
       setError(null);
       try {
         setLoading(true);
-        setResult(null);
         const md = await openFile(target);
-        setMetadata(md);
+        loadFile(md);   // 重置 spec / result / 选中行
       } catch (e) {
         const msg = typeof e === 'string' ? e : JSON.stringify(e);
         setError(`打开失败：${msg}`);
@@ -61,7 +60,7 @@ export function useFileDrop(): boolean {
     setup();
 
     return () => { unlisten?.(); };
-  }, [setMetadata, setError, setLoading, setResult]);
+  }, [loadFile, setError, setLoading]);
 
   return isDragging;
 }

@@ -2,7 +2,7 @@
 
 桌面 GUI 日志查看与分析工具（Tauri + React + TypeScript）。
 
-## 当前状态：Plan 2b + Export + Style v3 已完成
+## 当前状态：Plan 2b + Export + Style v3 + Saved Filters 已完成
 
 **最新视觉规范**：统一 28px 控件高度、Linear/Notion 风格、StatsPanel 瘦身、level 计数下沉到 footer。
 
@@ -19,6 +19,7 @@
 - **最近打开文件**：顶部 `▾` 下拉访问最近 10 个文件
 - **拖拽打开**：拖 .log / .jsonl / .txt 文件到窗口任意位置即可打开
 - **导出筛选结果**：CSV / JSON Lines / JSON Array 三种格式，FilterBar 右侧 📥 菜单触发
+- **保存筛选器**：按文件路径命名保存常用 level/scope/keyword 组合，FilterBar 右侧 📌 菜单一键调出 / 重命名 / 删除
 
 ## 开发
 
@@ -30,13 +31,13 @@ npm run tauri dev
 ## 测试
 
 ```bash
-cd src-tauri && cargo test     # 105 lib + 9 integration tests
+cd src-tauri && cargo test     # 110 lib + 9 integration tests
 npm test                       # 前端 vitest
 ```
 
 ## 路径
 
-- 自定义模板存储：`~/Library/Application Support/log-viewer/prefs.json`（macOS）
+- 自定义模板 + 保存的筛选器存储：`~/Library/Application Support/log-viewer/prefs.json`（macOS）
 
 ## 已知 MVP 限制
 
@@ -47,6 +48,5 @@ npm test                       # 前端 vitest
 
 ## 未实现
 
-- 保存/复用筛选器
 - 键盘快捷键全集（⌘O / ⌘F 等）
 - 跨页详情导航

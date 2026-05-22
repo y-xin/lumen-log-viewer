@@ -156,3 +156,88 @@ pub fn cmd_delete_custom_template(
     prefs_store.save(&prefs)?;
     Ok(())
 }
+
+#[derive(Serialize)]
+pub struct TestSample {
+    pub line_no: u32,
+    pub line_count: u32,
+    pub raw: String,
+    pub ok: bool,
+    pub message: Option<String>,
+    pub level: Option<String>,
+    pub scope: Option<String>,
+    pub fields_count: u32,
+}
+
+#[derive(Serialize)]
+pub struct TestResult {
+    pub samples: Vec<TestSample>,
+    pub hit_rate: f32,
+    pub field_completeness: f32,
+}
+
+#[tauri::command]
+pub fn cmd_test_template(
+    tpl: CustomTemplate,
+    limit: u32,
+    state: State<'_, SessionState>,
+) -> Result<TestResult, AppError> {
+    let rt = crate::prefs::store::compile_custom_template(&tpl)?;
+    let lines = state.lines()?;
+    let sample_limit = (limit as usize).max(1).min(lines.len());
+    let sample = &lines[..sample_limit];
+
+    let records = crate::parser::grouping::group_records(&rt, sample);
+    let display_count = records.len().min(limit as usize);
+
+    let mut samples = Vec::new();
+    let mut parsed_ok = 0u32;
+    let mut field_sum = 0f32;
+    for r in records.iter().take(display_count) {
+        let raw_joined = r.lines.join("\n");
+        let line_count = r.lines.len() as u32;
+        let parsed = <crate::parser::regex_template::RegexTemplate as crate::parser::template::ParserTemplate>::parse_record(&rt, &r.lines);
+        match parsed {
+            Some(p) => {
+                parsed_ok += 1;
+                let filled = [
+                    p.timestamp.is_some(),
+                    !matches!(p.level, crate::model::LogLevel::Unknown),
+                    p.scope.is_some(),
+                    !p.message.is_empty(),
+                ];
+                let count: u8 = filled.iter().map(|b| *b as u8).sum();
+                field_sum += (count as f32) / 4.0;
+                samples.push(TestSample {
+                    line_no: r.start_line,
+                    line_count,
+                    raw: raw_joined,
+                    ok: true,
+                    message: Some(p.message),
+                    level: Some(format!("{:?}", p.level)),
+                    scope: p.scope,
+                    fields_count: p.fields.len() as u32,
+                });
+            }
+            None => {
+                samples.push(TestSample {
+                    line_no: r.start_line,
+                    line_count,
+                    raw: raw_joined,
+                    ok: false,
+                    message: None,
+                    level: None,
+                    scope: None,
+                    fields_count: 0,
+                });
+            }
+        }
+    }
+
+    let total = records.len().max(1) as f32;
+    Ok(TestResult {
+        samples,
+        hit_rate: (parsed_ok as f32) / total,
+        field_completeness: if parsed_ok > 0 { field_sum / (parsed_ok as f32) } else { 0.0 },
+    })
+}

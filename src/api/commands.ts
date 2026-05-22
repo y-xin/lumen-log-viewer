@@ -26,6 +26,7 @@ function serializeSpec(spec: QuerySpec): unknown {
     scope_filter: spec.scope_filter ?? null,
     scope_in: spec.scope_in ?? null,
     text_search: spec.text_search ?? null,
+    text_search_mode: spec.text_search_mode ?? null,
   };
 }
 

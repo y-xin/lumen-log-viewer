@@ -38,17 +38,26 @@ export function FilterBar() {
 
   // 本地输入态（debounce 后再写 store）
   const [keyword, setKeyword] = useState(spec.text_search ?? '');
+  const [keywordMode, setKeywordMode] = useState<'substring' | 'regex'>(spec.text_search_mode ?? 'substring');
   const [scopeField, setScopeField] = useState(spec.scope_filter?.field_name ?? 'scope');
   const [scopePattern, setScopePattern] = useState(spec.scope_filter?.pattern ?? '');
   const [scopeMode, setScopeMode] = useState<MatchMode>(spec.scope_filter?.mode ?? 'glob');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
 
-  // debounce 关键词
+  // 关键词 regex 模式下校验语法（仅用于 input 红边框提示；非法时仍 patchSpec，后端会静默放行）
+  const keywordRegexInvalid = keywordMode === 'regex' && keyword.length > 0 && (() => {
+    try { new RegExp(keyword); return false; } catch { return true; }
+  })();
+
+  // debounce 关键词 + mode
   useEffect(() => {
-    const t = setTimeout(() => patchSpec({ text_search: keyword || null }), 150);
+    const t = setTimeout(() => patchSpec({
+      text_search: keyword || null,
+      text_search_mode: keywordMode === 'regex' ? 'regex' : null,
+    }), 150);
     return () => clearTimeout(t);
-  }, [keyword, patchSpec]);
+  }, [keyword, keywordMode, patchSpec]);
 
   // debounce scope 三联：local 输入 → 写入 store
   useEffect(() => {
@@ -192,9 +201,15 @@ export function FilterBar() {
           ref={keywordRef}
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
-          placeholder="在 message / 原始行中搜索"
-          className="input-ctl flex-1 max-w-md"
+          placeholder={keywordMode === 'regex' ? '正则（大小写不敏感）' : '在 message / 原始行中搜索'}
+          className={['input-ctl flex-1 max-w-md', keywordRegexInvalid ? 'border-red-400' : ''].join(' ')}
+          title={keywordRegexInvalid ? '正则语法非法（已被忽略）' : ''}
         />
+        <button
+          onClick={() => setKeywordMode((m) => (m === 'regex' ? 'substring' : 'regex'))}
+          className={['ctl', keywordMode === 'regex' ? 'ctl-primary' : ''].join(' ')}
+          title={keywordMode === 'regex' ? '当前 regex 模式（点切换为 substring）' : '当前 substring 模式（点切换为 regex）'}
+        >.Rx</button>
         <span className="text-slate-500 ml-2">时间：</span>
         <input
           type="datetime-local"

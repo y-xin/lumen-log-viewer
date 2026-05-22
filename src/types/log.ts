@@ -17,6 +17,8 @@ export interface QuerySpec {
   /** 多选 scope 白名单（StatsPanel 的 tag 多选）。与 scope_filter 是 AND 关系。 */
   scope_in?: string[] | null;
   text_search?: string | null;
+  /** "substring"（默认）/ "regex"；null/undefined = substring 兼容旧 spec */
+  text_search_mode?: 'substring' | 'regex' | null;
 }
 
 export interface LogEntry {

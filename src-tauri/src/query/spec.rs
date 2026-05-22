@@ -17,6 +17,9 @@ pub struct QuerySpec {
     #[serde(default)]
     pub scope_in: Option<HashSet<String>>,
     pub text_search: Option<String>,
+    /// "substring"（默认）/ "regex"；None = substring 兼容旧 spec
+    #[serde(default)]
+    pub text_search_mode: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

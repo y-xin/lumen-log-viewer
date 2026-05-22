@@ -2,6 +2,7 @@
 
 use crate::error::AppError;
 use crate::loader::reader;
+use crate::loader::{incremental::IncrementalParser, watcher::{FileWatcher, RotationEvent}};
 use crate::model::{FileMetadata, LogEntry, Stats};
 use crate::parser;
 use crate::parser::registry::Registry;
@@ -11,7 +12,8 @@ use crate::session::SessionState;
 use crate::stats;
 use serde::Serialize;
 use std::path::Path;
-use tauri::State;
+use std::sync::Arc;
+use tauri::{AppHandle, Emitter, Manager, State};
 
 #[derive(Serialize)]
 pub struct QueryResponse {
@@ -25,6 +27,17 @@ pub struct TemplateInfo {
     pub id: String,
     pub name: String,
     pub builtin: bool,
+}
+
+#[derive(Serialize, Clone)]
+pub struct EntriesAppendedPayload {
+    pub entries: Vec<LogEntry>,
+    pub total: u32,
+}
+
+#[derive(Serialize, Clone)]
+pub struct FileRotatedPayload {
+    pub kind: String,    // "Truncated" / "InodeChanged" / "Removed"
 }
 
 const BUILTIN_IDS: &[&str] = &[
@@ -249,4 +262,57 @@ pub fn cmd_test_template(
         hit_rate: (parsed_ok as f32) / total,
         field_completeness: if parsed_ok > 0 { field_sum / (parsed_ok as f32) } else { 0.0 },
     })
+}
+
+#[tauri::command]
+pub fn cmd_start_follow(
+    app: AppHandle,
+    state: State<'_, SessionState>,
+    registry: State<'_, Registry>,
+) -> Result<(), AppError> {
+    if state.is_following() { return Ok(()); }
+    let meta = state.metadata()?;
+    let path: std::path::PathBuf = meta.path.clone().into();
+    let template_id = meta.template_id.clone();
+    let tpl_arc = registry.find(&template_id)
+        .ok_or_else(|| AppError::Internal(format!("模板未找到：{template_id}")))?;
+
+    let initial = crate::loader::reader::file_meta(&path)?;
+    let next_line_no = meta.total + 1;
+    let incremental = IncrementalParser::new(next_line_no);
+
+    let app_for_append = app.clone();
+    let app_for_rotation = app.clone();
+    let tpl_arc_for_append = tpl_arc.clone();
+
+    let on_append = Arc::new(move |chunk: String| {
+        let session: State<'_, SessionState> = app_for_append.state();
+        if let Ok(new) = session.feed_chunk(tpl_arc_for_append.as_parser(), &chunk) {
+            if !new.is_empty() {
+                let total = session.metadata().map(|m| m.total).unwrap_or(0);
+                let _ = app_for_append.emit("entries_appended", EntriesAppendedPayload { entries: new, total });
+            }
+        }
+    });
+    let on_rotation = Arc::new(move |ev: RotationEvent| {
+        let kind = format!("{:?}", ev);
+        let _ = app_for_rotation.emit("file_rotated", FileRotatedPayload { kind });
+    });
+
+    let watcher = FileWatcher::start(path, initial, on_append, on_rotation)?;
+    state.install_watcher(watcher, incremental)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn cmd_stop_follow(
+    state: State<'_, SessionState>,
+    registry: State<'_, Registry>,
+) -> Result<(), AppError> {
+    if !state.is_following() { return Ok(()); }
+    let meta = state.metadata()?;
+    if let Some(tpl_arc) = registry.find(&meta.template_id) {
+        let _ = state.flush_incremental(tpl_arc.as_parser());
+    }
+    state.remove_watcher()
 }

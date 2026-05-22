@@ -1,0 +1,11 @@
+[2026-05-21 17:26:37.566] [info] (main/network-manager) 启动网络进程 {"scriptPath":"/Users/x/scrm/proxy/network.js"}
+[2026-05-21 17:26:37.576] [info] (main/network-manager) 网络进程已启动
+[2026-05-21 17:26:37.577] [info] (main/network-manager) main-port 已建立
+[2026-05-21 17:26:37.623] [info] (network) 网络进程已初始化
+[2026-05-21 17:26:37.624] [info] (network) 端口已注册 { source: 'main', id: 'main', userId: '' }
+[2026-05-21 17:26:37.760] [info] (app-update) service started {
+  feedUrl: 'https://djs-download.s3.ap-southeast-1.amazonaws.com/releases/dujiaoshou/',
+  channel: 'latest'
+}
+[2026-05-21 17:26:38.123] [warn] (gost) {"caller":"parsing/tls.go:57","level":"debug","msg":"load global TLS certificate files failed"}
+[2026-05-21 17:26:38.456] [error] (auth) login failed for user 42

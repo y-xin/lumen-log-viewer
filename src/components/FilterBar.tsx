@@ -81,8 +81,8 @@ export function FilterBar() {
   const activeLevels = new Set(spec.levels ?? LEVELS);
 
   return (
-    <div className="p-3 border-b bg-white space-y-2">
-      <div className="flex items-center gap-2 text-sm">
+    <div className="p-2 border-b bg-white space-y-1">
+      <div className="flex items-center gap-1.5 text-sm">
         <span className="text-slate-500">级别：</span>
         {LEVELS.map((lv) => (
           <button
@@ -99,12 +99,12 @@ export function FilterBar() {
         <div className="ml-auto"><ExportMenu /></div>
       </div>
 
-      <div className="flex items-center gap-2 text-sm">
+      <div className="flex items-center gap-1.5 text-sm">
         <span className="text-slate-500">Scope：</span>
         <select
           value={scopeField}
           onChange={(e) => setScopeField(e.target.value)}
-          className="border rounded px-1 py-0.5 text-xs"
+          className="select-ctl"
         >
           {fieldOptions.map((f) => <option key={f} value={f}>{f}</option>)}
         </select>
@@ -113,7 +113,7 @@ export function FilterBar() {
             value={scopePattern}
             onChange={(e) => setScopePattern(e.target.value)}
             placeholder="模式（如 auth.* 或 user-service）"
-            className="border rounded px-2 py-0.5 text-xs w-full pr-6"
+            className="input-ctl w-full pr-6"
           />
           {scopePattern && (
             <button
@@ -125,12 +125,12 @@ export function FilterBar() {
             </button>
           )}
         </div>
-        <div className="flex border rounded overflow-hidden text-xs">
+        <div className="ctl-segment">
           {(['exact', 'glob', 'regex'] as const).map((m) => (
             <button
               key={m}
               onClick={() => setScopeMode(m)}
-              className={['px-2 py-0.5', scopeMode === m ? 'bg-slate-700 text-white' : 'bg-white text-slate-600'].join(' ')}
+              className={scopeMode === m ? 'active' : ''}
             >
               {m}
             </button>
@@ -138,27 +138,29 @@ export function FilterBar() {
         </div>
       </div>
 
-      <div className="flex items-center gap-2 text-sm">
+      <div className="flex items-center gap-1.5 text-sm">
         <span className="text-slate-500">关键词：</span>
         <input
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
           placeholder="在 message / 原始行中搜索"
-          className="border rounded px-2 py-0.5 text-xs flex-1 max-w-md"
+          className="input-ctl flex-1 max-w-md"
         />
         <span className="text-slate-500 ml-2">时间：</span>
         <input
           type="datetime-local"
           value={from}
           onChange={(e) => setFrom(e.target.value ? new Date(e.target.value).toISOString() : '')}
-          className="border rounded px-1 py-0.5 text-xs"
+          className="input-ctl text-[11px]"
+          style={{ width: 170 }}
         />
         <span className="text-slate-400">~</span>
         <input
           type="datetime-local"
           value={to}
           onChange={(e) => setTo(e.target.value ? new Date(e.target.value).toISOString() : '')}
-          className="border rounded px-1 py-0.5 text-xs"
+          className="input-ctl text-[11px]"
+          style={{ width: 170 }}
         />
       </div>
     </div>

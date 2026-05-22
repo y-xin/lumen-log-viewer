@@ -41,13 +41,21 @@ function lineLabel(e: LogEntry): string {
   return e.line_count > 1 ? `${e.line_no}-${e.line_no + e.line_count - 1}` : `${e.line_no}`;
 }
 
+// 用 spec 的 JSON 字符串作为"会话指纹" — 文件变 / spec 变 → 指纹变 → 重置 entries。
+// 单纯 follow append 时（result 引用换了但 spec 没变 + total_matched 增大）→ 保留已加载的 entries 防止闪烁。
+function specKey(s: unknown): string {
+  try { return JSON.stringify(s); } catch { return ''; }
+}
+
 export function LogList() {
-  const { spec, result, selectedLineNo, setSelectedLineNo, newEntriesPending, clearNewEntriesPending } = useSession();
+  const { spec, result, selectedEntry, setSelectedEntry, newEntriesPending, clearNewEntriesPending } = useSession();
   const [entries, setEntries] = useState<(LogEntry | undefined)[]>([]);
   const pendingPages = useRef<Set<number>>(new Set());
   const seq = useRef(0);
   const listRef = useRef<List | null>(null);
-  const atBottomRef = useRef(true);
+  // 跟踪是否在底部；state 而非 ref，让"跳到底部"按钮能根据它显隐
+  const [atBottom, setAtBottom] = useState(true);
+  const lastSpecKey = useRef<string>('');
 
   // ─── 容器高度 ──────────────────────────────────────────
   const [containerHeight, setContainerHeight] = useState<number>(() =>
@@ -95,18 +103,40 @@ export function LogList() {
   };
 
   // ─── 数据加载 ──────────────────────────────────────────
+  // spec 变化 → 重置（清空再注入首页）；spec 没变 + result 引用变 → smart merge：
+  //   - 扩展 entries 长度到 total_matched
+  //   - 把 result.page_entries（其中含追加的新条目）覆盖到对应位置
+  //   - 不动其他位置（保留 fetchPage 拿到的页）
+  // 这是修频闪关键：避免每次 follow 推入新条目都重建整个数组。
+  const curKey = specKey(spec);
   useEffect(() => {
-    seq.current++;
     pendingPages.current.clear();
-    if (!result) { setEntries([]); return; }
-    const arr = new Array<LogEntry | undefined>(result.total_matched);
-    result.page_entries.forEach((e, i) => { arr[i] = e; });
-    setEntries(arr);
-    if (atBottomRef.current && listRef.current && result.total_matched > 0) {
+    if (!result) {
+      seq.current++;
+      lastSpecKey.current = curKey;
+      setEntries([]);
+      return;
+    }
+    const specChanged = lastSpecKey.current !== curKey;
+    lastSpecKey.current = curKey;
+    setEntries((prev) => {
+      const tot = result.total_matched;
+      let arr: (LogEntry | undefined)[];
+      if (specChanged || prev.length === 0) {
+        seq.current++;
+        arr = new Array<LogEntry | undefined>(tot);
+      } else {
+        arr = prev.slice();
+        if (arr.length !== tot) arr.length = tot;
+      }
+      result.page_entries.forEach((e, i) => { arr[i] = e; });
+      return arr;
+    });
+    if (atBottom && listRef.current && result.total_matched > 0) {
       listRef.current.scrollToItem(result.total_matched - 1, 'end');
       clearNewEntriesPending();
     }
-  }, [result, spec, clearNewEntriesPending]);
+  }, [result, curKey, atBottom, clearNewEntriesPending]);
 
   const fetchPage = async (pageIdx: number) => {
     if (pendingPages.current.has(pageIdx)) return;
@@ -127,9 +157,10 @@ export function LogList() {
 
   const onScroll = ({ scrollOffset }: ListOnScrollProps) => {
     if (!result) return;
-    const maxScroll = result.total_matched * ROW_HEIGHT - listH;
-    atBottomRef.current = (maxScroll - scrollOffset) < BOTTOM_THRESHOLD;
-    if (atBottomRef.current && newEntriesPending > 0) {
+    const maxScroll = result.total_matched * ROW_HEIGHT - (listH - 28);
+    const isAtBottom = (maxScroll - scrollOffset) < BOTTOM_THRESHOLD;
+    setAtBottom(isAtBottom);
+    if (isAtBottom && newEntriesPending > 0) {
       clearNewEntriesPending();
     }
   };
@@ -148,14 +179,14 @@ export function LogList() {
       fetchPage(pageIdx);
       return <div style={style} className="px-2 text-slate-300 text-xs flex items-center">…</div>;
     }
-    const isSelected = selectedLineNo === e.line_no;
+    const isSelected = selectedEntry?.line_no === e.line_no;
     const fieldsTxt = formatFields(e.fields);
     const messageTxt = e.message || e.raw;
     const combined = fieldsTxt ? `${messageTxt}    ${fieldsTxt}` : messageTxt;
     return (
       <div
         style={style}
-        onClick={() => setSelectedLineNo(isSelected ? null : e.line_no)}
+        onClick={() => setSelectedEntry(isSelected ? null : e)}
         className={[
           'px-2 text-xs flex items-stretch gap-0 font-mono border-b border-slate-100 cursor-pointer',
           isSelected ? 'bg-blue-50' : 'hover:bg-slate-50',
@@ -181,7 +212,8 @@ export function LogList() {
   };
 
   if (!result) return null;
-  const showFloating = newEntriesPending > 0 && !atBottomRef.current;
+  // 显示跳到底部按钮：不在底部时一直显示；如果还有未读新条目数显示数字
+  const showJumpToBottom = !atBottom && result.total_matched > 0;
 
   // 表头：与 Row 列宽对齐，列之间放可拖动的 resizer
   const Header = () => (
@@ -213,13 +245,21 @@ export function LogList() {
           {Row}
         </List>
       </div>
-      {showFloating && (
+      {showJumpToBottom && (
         <button
           onClick={jumpToBottom}
-          className="absolute right-6 px-3 py-1.5 bg-blue-600 text-white text-xs rounded-full shadow-lg hover:bg-blue-700 z-10"
+          className={[
+            'absolute right-6 px-3 py-1.5 text-xs rounded-full shadow-lg z-10 transition-colors',
+            newEntriesPending > 0
+              ? 'bg-blue-600 text-white hover:bg-blue-700'
+              : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50',
+          ].join(' ')}
           style={{ bottom: STATUS_BAR_HEIGHT + 16 }}
+          title="跳到底部"
         >
-          ↓ {newEntriesPending.toLocaleString()} 条新日志
+          {newEntriesPending > 0
+            ? `↓ ${newEntriesPending.toLocaleString()} 条新日志`
+            : '↓ 跳到底部'}
         </button>
       )}
       <div className="px-3 py-1 text-xs text-slate-500 border-t bg-slate-50">

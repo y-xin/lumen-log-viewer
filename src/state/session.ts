@@ -13,7 +13,11 @@ interface SessionStore {
   error: string | null;
   templates: TemplateInfo[];
   currentTemplateId: string | null;
-  selectedLineNo: number | null;
+  /**
+   * 当前在详情抽屉里选中的 entry —— 直接存整个对象，不再用 line_no 反向查找
+   * （之前用 line_no 只能在 result.page_entries 前 200 条里找到，几万行后的行点不出来）。
+   */
+  selectedEntry: LogEntry | null;
 
   follow: boolean;
   rotationKind: string | null;
@@ -32,7 +36,7 @@ interface SessionStore {
   setLoading: (b: boolean) => void;
   setError: (e: string | null) => void;
   setTemplates: (ts: TemplateInfo[]) => void;
-  setSelectedLineNo: (n: number | null) => void;
+  setSelectedEntry: (e: LogEntry | null) => void;
 
   setFollow: (b: boolean) => void;
   setRotationKind: (k: string | null) => void;
@@ -48,7 +52,7 @@ export const useSession = create<SessionStore>((set) => ({
   error: null,
   templates: [],
   currentTemplateId: null,
-  selectedLineNo: null,
+  selectedEntry: null,
 
   follow: false,
   rotationKind: null,
@@ -57,7 +61,7 @@ export const useSession = create<SessionStore>((set) => ({
   loadFile: (m) => set({
     metadata: m,
     currentTemplateId: m.template_id,
-    selectedLineNo: null,
+    selectedEntry: null,
     newEntriesPending: 0,
     spec: { levels: ALL_LEVELS },
     result: null,
@@ -67,7 +71,7 @@ export const useSession = create<SessionStore>((set) => ({
   setMetadata: (m) => set({
     metadata: m,
     currentTemplateId: m?.template_id ?? null,
-    selectedLineNo: null,
+    selectedEntry: null,
     newEntriesPending: 0,
   }),
   setSpec: (spec) => set({ spec }),
@@ -76,7 +80,7 @@ export const useSession = create<SessionStore>((set) => ({
   setLoading: (loading) => set({ loading }),
   setError: (error) => set({ error }),
   setTemplates: (templates) => set({ templates }),
-  setSelectedLineNo: (n) => set({ selectedLineNo: n }),
+  setSelectedEntry: (e) => set({ selectedEntry: e }),
   setFollow: (b) => set({ follow: b }),
   setRotationKind: (k) => set({ rotationKind: k }),
   appendEntries: (newEntries, total) => set((s) => {

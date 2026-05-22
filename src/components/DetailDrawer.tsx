@@ -1,25 +1,21 @@
 // 详情抽屉：右侧滑出，显示选中行的 fields + raw + 快捷筛选按钮
+// 关键：直接读 selectedEntry（store 里整个对象），而不是 line_no 反向查 page_entries —
+//      避免几万行后的行因不在首页就找不到。
 
-import { useMemo } from 'react';
 import { useSession } from '../state/session';
 import { useKeyboardNav } from '../hooks/useKeyboardNav';
-import type { LogEntry } from '../types/log';
 
 export function DetailDrawer() {
-  const { result, selectedLineNo, setSelectedLineNo, patchSpec } = useSession();
+  const { selectedEntry, setSelectedEntry, patchSpec } = useSession();
   useKeyboardNav();
 
-  const entry: LogEntry | undefined = useMemo(() => {
-    if (selectedLineNo == null || !result) return undefined;
-    return result.page_entries.find((e) => e.line_no === selectedLineNo);
-  }, [selectedLineNo, result]);
-
-  if (!entry) return null;
+  if (!selectedEntry) return null;
+  const entry = selectedEntry;
 
   const fieldEntries = Object.entries(entry.fields);
   const lineLabel = entry.line_count > 1
-    ? `#${entry.line_no}–${entry.line_no + entry.line_count - 1} (${entry.line_count} 行)`
-    : `#${entry.line_no}`;
+    ? `${entry.line_no}–${entry.line_no + entry.line_count - 1} (${entry.line_count} 行)`
+    : `${entry.line_no}`;
 
   const applyScope = () => {
     if (!entry.scope) return;
@@ -42,23 +38,23 @@ export function DetailDrawer() {
     <>
       <div
         className="fixed inset-0 bg-transparent z-20"
-        onClick={() => setSelectedLineNo(null)}
+        onClick={() => setSelectedEntry(null)}
       />
       <aside
         className="fixed top-0 right-0 h-full w-[35vw] min-w-[380px] max-w-[720px] bg-white shadow-xl border-l z-30 flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <header className="flex items-center justify-between px-4 py-2 border-b">
-          <h3 className="text-sm font-semibold">详情 {lineLabel}</h3>
+          <h3 className="text-sm font-semibold">详情 #{lineLabel}</h3>
           <button
-            onClick={() => setSelectedLineNo(null)}
+            onClick={() => setSelectedEntry(null)}
             className="text-slate-500 hover:text-slate-700"
             title="关闭 (Esc)"
           >
             ✕
           </button>
         </header>
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 text-sm">
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 text-sm selectable">
           <section className="grid grid-cols-2 gap-2 text-xs">
             <Field label="时间" value={entry.timestamp ?? '-'} />
             <Field label="级别" value={entry.level.toUpperCase()} />

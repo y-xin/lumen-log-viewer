@@ -108,3 +108,12 @@ export interface TestResult {
   hit_rate: number;
   field_completeness: number;
 }
+
+// ─── 导出 ───
+
+export type ExportFormat = 'csv' | 'jsonl' | 'json_array';
+
+export interface ExportResult {
+  count: number;
+  bytes_written: number;
+}

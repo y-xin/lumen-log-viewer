@@ -10,6 +10,8 @@ import type {
   TemplateInfo,
   CustomTemplate,
   TestResult,
+  ExportFormat,
+  ExportResult,
 } from '../types/log';
 
 /** 序列化 QuerySpec 时 levels / scope_in 由数组转为后端可接受形态 */
@@ -73,4 +75,16 @@ export async function listRecentFiles(): Promise<string[]> {
 
 export async function clearRecentFiles(): Promise<void> {
   return invoke<void>('cmd_clear_recent_files');
+}
+
+export async function exportToFile(
+  spec: QuerySpec,
+  format: ExportFormat,
+  path: string,
+): Promise<ExportResult> {
+  return invoke<ExportResult>('cmd_export', {
+    spec: serializeSpec(spec),
+    format,
+    path,
+  });
 }

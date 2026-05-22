@@ -20,7 +20,7 @@ pub fn aggregate(entries: &[LogEntry], matched: &[u32]) -> Stats {
     top.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
     top.truncate(10);
 
-    Stats { total: matched.len() as u32, level_counts, top_scopes: top }
+    Stats { total: matched.len() as u32, level_counts, top_scopes: top, time_buckets: vec![] }
 }
 
 #[cfg(test)]

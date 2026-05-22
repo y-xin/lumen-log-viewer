@@ -38,10 +38,18 @@ pub struct FileMetadata {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct TimeBucket {
+    pub bucket_start: DateTime<Utc>,
+    pub total: u32,
+    pub by_level: HashMap<LogLevel, u32>,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct Stats {
     pub total: u32,
     pub level_counts: HashMap<LogLevel, u32>,
     pub top_scopes: Vec<(String, u32)>,
+    pub time_buckets: Vec<TimeBucket>,
 }
 
 #[cfg(test)]

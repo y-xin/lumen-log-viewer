@@ -55,6 +55,10 @@ pub struct Prefs {
     /// 命名筛选器：key = 文件绝对路径，value = 该文件下保存的筛选器列表
     #[serde(default)]
     pub saved_filters: HashMap<String, Vec<SavedFilter>>,
+    /// UI 偏好：列宽（key = "line" | "time" | "level" | "scope"，value = px）
+    /// 全局生效，不按文件区分；用户拖一次就记住。
+    #[serde(default)]
+    pub column_widths: Option<HashMap<String, u32>>,
 }
 
 const MAX_RECENT_FILES: usize = 10;
@@ -119,6 +123,18 @@ impl PrefsStore {
     pub fn clear_recent(&self) -> Result<(), AppError> {
         let mut prefs = self.load();
         prefs.recent_files.clear();
+        self.save(&prefs)
+    }
+
+    /// 读列宽偏好；从未保存返回 None
+    pub fn get_column_widths(&self) -> Option<HashMap<String, u32>> {
+        self.load().column_widths
+    }
+
+    /// 写列宽偏好（整张表覆盖）
+    pub fn save_column_widths(&self, widths: HashMap<String, u32>) -> Result<(), AppError> {
+        let mut prefs = self.load();
+        prefs.column_widths = Some(widths);
         self.save(&prefs)
     }
 
@@ -187,6 +203,7 @@ impl Prefs {
             custom_templates: vec![],
             recent_files: vec![],
             saved_filters: HashMap::new(),
+            column_widths: None,
         }
     }
 }
@@ -261,6 +278,7 @@ mod tests {
             custom_templates: vec![sample_template()],
             recent_files: vec![],
             saved_filters: HashMap::new(),
+            column_widths: None,
         };
         store.save(&prefs).unwrap();
         let loaded = store.load();

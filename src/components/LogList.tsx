@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { VariableSizeList as List, ListChildComponentProps, ListOnItemsRenderedProps } from 'react-window';
-import { getPage } from '../api/commands';
+import { getPage, getColumnWidths, saveColumnWidths } from '../api/commands';
 import { useSession } from '../state/session';
 import type { LogEntry, LogLevel } from '../types/log';
 import { HighlightedText } from './HighlightedText';
@@ -103,8 +103,39 @@ export function LogList() {
   useEffect(() => () => observerRef.current?.disconnect(), []);
   const listH = Math.max(0, containerHeight - STATUS_BAR_HEIGHT);
 
-  // ─── 列宽（可拖动） ────────────────────────────────────
+  // ─── 列宽（可拖动 + 持久化到 prefs.json） ────────────────────────────────────
   const [widths, setWidths] = useState<Record<ColKey, number>>(DEFAULT_WIDTHS);
+
+  // 启动时拉一次列宽偏好
+  useEffect(() => {
+    let cancelled = false;
+    getColumnWidths()
+      .then((saved) => {
+        if (cancelled || !saved) return;
+        // 只覆盖识别的 key，未知 key 丢弃
+        const next: Record<ColKey, number> = { ...DEFAULT_WIDTHS };
+        (Object.keys(DEFAULT_WIDTHS) as ColKey[]).forEach((k) => {
+          const v = saved[k];
+          if (typeof v === 'number' && v >= MIN_WIDTH) next[k] = v;
+        });
+        setWidths(next);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  // 列宽变化后 debounced 持久化（防拖动期间疯狂 IO）
+  const persistTimer = useRef<number | null>(null);
+  useEffect(() => {
+    if (persistTimer.current != null) window.clearTimeout(persistTimer.current);
+    persistTimer.current = window.setTimeout(() => {
+      saveColumnWidths(widths).catch(() => {});
+    }, 400);
+    return () => {
+      if (persistTimer.current != null) window.clearTimeout(persistTimer.current);
+    };
+  }, [widths]);
+
   const startResize = (col: ColKey, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();

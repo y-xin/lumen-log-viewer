@@ -427,3 +427,20 @@ pub fn cmd_get_position(
 ) -> Result<Option<PositionResponse>, AppError> {
     query::neighbor::position(&state, &spec, line_no)
 }
+
+// ─── UI 偏好（列宽持久化）───
+
+#[tauri::command]
+pub fn cmd_get_column_widths(
+    prefs_store: State<'_, PrefsStore>,
+) -> Option<std::collections::HashMap<String, u32>> {
+    prefs_store.get_column_widths()
+}
+
+#[tauri::command]
+pub fn cmd_save_column_widths(
+    prefs_store: State<'_, PrefsStore>,
+    widths: std::collections::HashMap<String, u32>,
+) -> Result<(), AppError> {
+    prefs_store.save_column_widths(widths)
+}

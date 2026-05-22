@@ -52,6 +52,8 @@ pub fn run() {
             commands::cmd_rename_saved_filter,
             commands::cmd_get_neighbor,
             commands::cmd_get_position,
+            commands::cmd_get_column_widths,
+            commands::cmd_save_column_widths,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

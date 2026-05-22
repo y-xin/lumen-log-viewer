@@ -135,3 +135,13 @@ export async function getPosition(
     spec: serializeSpec(spec), lineNo,
   });
 }
+
+// ─── UI 偏好 ───
+
+export async function getColumnWidths(): Promise<Record<string, number> | null> {
+  return invoke<Record<string, number> | null>('cmd_get_column_widths');
+}
+
+export async function saveColumnWidths(widths: Record<string, number>): Promise<void> {
+  return invoke<void>('cmd_save_column_widths', { widths });
+}

@@ -10,7 +10,7 @@ use std::path::Path;
 fn electron_multiline_log_picks_bracket_electron() {
     let lines = reader::read_all_lines(Path::new("tests/fixtures/electron-multiline.log")).unwrap();
     let registry = Registry::new_with_builtins();
-    let (entries, template_id) = parser::parse_with_sniff(&registry, &lines);
+    let (entries, template_id, _) = parser::parse_with_sniff(&registry, &lines);
 
     assert_eq!(template_id, "bracket-electron");
     let multiline = entries.iter().find(|e| e.message.contains("service started")).unwrap();
@@ -24,7 +24,7 @@ fn electron_multiline_log_picks_bracket_electron() {
 fn nginx_log_picks_nginx_combined() {
     let lines = reader::read_all_lines(Path::new("tests/fixtures/nginx-access.log")).unwrap();
     let registry = Registry::new_with_builtins();
-    let (_entries, template_id) = parser::parse_with_sniff(&registry, &lines);
+    let (_entries, template_id, _) = parser::parse_with_sniff(&registry, &lines);
     assert_eq!(template_id, "nginx-combined");
 }
 
@@ -32,7 +32,7 @@ fn nginx_log_picks_nginx_combined() {
 fn python_log_picks_python_default() {
     let lines = reader::read_all_lines(Path::new("tests/fixtures/python.log")).unwrap();
     let registry = Registry::new_with_builtins();
-    let (_entries, template_id) = parser::parse_with_sniff(&registry, &lines);
+    let (_entries, template_id, _) = parser::parse_with_sniff(&registry, &lines);
     assert_eq!(template_id, "python-default");
 }
 
@@ -40,7 +40,7 @@ fn python_log_picks_python_default() {
 fn logfmt_log_picks_logfmt() {
     let lines = reader::read_all_lines(Path::new("tests/fixtures/logfmt.log")).unwrap();
     let registry = Registry::new_with_builtins();
-    let (_entries, template_id) = parser::parse_with_sniff(&registry, &lines);
+    let (_entries, template_id, _) = parser::parse_with_sniff(&registry, &lines);
     assert_eq!(template_id, "logfmt");
 }
 
@@ -48,6 +48,6 @@ fn logfmt_log_picks_logfmt() {
 fn jsonl_log_picks_json_lines() {
     let lines = reader::read_all_lines(Path::new("tests/fixtures/sample.jsonl")).unwrap();
     let registry = Registry::new_with_builtins();
-    let (_entries, template_id) = parser::parse_with_sniff(&registry, &lines);
+    let (_entries, template_id, _) = parser::parse_with_sniff(&registry, &lines);
     assert_eq!(template_id, "json-lines");
 }

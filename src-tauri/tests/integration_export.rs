@@ -11,7 +11,7 @@ use tempfile::tempdir;
 #[test]
 fn jsonl_roundtrips_full_fixture() {
     let lines = reader::read_all_lines(Path::new("tests/fixtures/sample.jsonl")).unwrap();
-    let (entries, _) = parser::parse_with_sniff(&Registry::new_with_builtins(), &lines);
+    let (entries, _, _) = parser::parse_with_sniff(&Registry::new_with_builtins(), &lines);
     let matched: Vec<u32> = (0..entries.len() as u32).collect();
 
     let dir = tempdir().unwrap();
@@ -29,7 +29,7 @@ fn jsonl_roundtrips_full_fixture() {
 #[test]
 fn csv_has_header_plus_one_row_per_entry() {
     let lines = reader::read_all_lines(Path::new("tests/fixtures/sample.jsonl")).unwrap();
-    let (entries, _) = parser::parse_with_sniff(&Registry::new_with_builtins(), &lines);
+    let (entries, _, _) = parser::parse_with_sniff(&Registry::new_with_builtins(), &lines);
     let matched: Vec<u32> = (0..entries.len() as u32).collect();
 
     let dir = tempdir().unwrap();
@@ -48,7 +48,7 @@ fn csv_has_header_plus_one_row_per_entry() {
 #[test]
 fn json_array_parses_back_to_vec() {
     let lines = reader::read_all_lines(Path::new("tests/fixtures/sample.jsonl")).unwrap();
-    let (entries, _) = parser::parse_with_sniff(&Registry::new_with_builtins(), &lines);
+    let (entries, _, _) = parser::parse_with_sniff(&Registry::new_with_builtins(), &lines);
     let matched: Vec<u32> = (0..entries.len() as u32).collect();
 
     let dir = tempdir().unwrap();

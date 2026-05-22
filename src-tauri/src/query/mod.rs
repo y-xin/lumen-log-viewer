@@ -44,6 +44,7 @@ mod tests {
             path: "/x".into(), total: 3, time_range: None,
             level_counts: HashMap::new(), scopes: vec![], scope_counts: HashMap::new(),
             template_id: "json-lines".into(),
+            sniff_kind: None,
         };
         s.load(meta, vec![
             e(LogLevel::Info, None, "a"),

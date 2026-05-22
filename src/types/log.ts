@@ -39,6 +39,8 @@ export interface FileMetadata {
   /** scope → 出现次数，全文件统计（不随筛选变化），供 StatsPanel 多选 tag 渲染。 */
   scope_counts: Record<string, number>;
   template_id: string;
+  /** 嗅探匹配质量；AutoMatch = 自信 / Suggested = 不确定 / NoMatch = fallback；reparse 时 undefined */
+  sniff_kind?: 'AutoMatch' | 'Suggested' | 'NoMatch';
 }
 
 export interface TimeBucket {

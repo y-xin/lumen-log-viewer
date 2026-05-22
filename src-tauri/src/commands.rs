@@ -69,8 +69,9 @@ pub fn cmd_open_file(
     prefs_store: State<'_, PrefsStore>,
 ) -> Result<FileMetadata, AppError> {
     let lines = reader::read_all_lines(Path::new(&path))?;
-    let (entries, template_id) = parser::parse_with_sniff(&registry, &lines);
-    let metadata = parser::compute_metadata(&path, &entries, &template_id);
+    let (entries, template_id, sniff_kind) = parser::parse_with_sniff(&registry, &lines);
+    let mut metadata = parser::compute_metadata(&path, &entries, &template_id);
+    metadata.sniff_kind = Some(sniff_kind);
     state.load_with_lines(metadata.clone(), entries, lines);
     // 成功后记录到最近文件（失败不阻塞）
     let _ = prefs_store.record_recent(&path);

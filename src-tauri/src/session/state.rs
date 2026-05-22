@@ -186,6 +186,7 @@ mod tests {
             scopes: vec![],
             scope_counts: HashMap::new(),
             template_id: "json-lines".into(),
+            sniff_kind: None,
         }
     }
 

@@ -38,11 +38,13 @@ pub fn parse_lines(lines: &[String]) -> Vec<LogEntry> {
 }
 
 /// 嗅探后用最高分模板解析。如果完全无匹配，回退到把每行作为 Unknown fallback。
-pub fn parse_with_sniff(registry: &Registry, lines: &[String]) -> (Vec<LogEntry>, String) {
+/// 返回 (entries, template_id, sniff_kind) — sniff_kind 给前端做不确定提示用
+pub fn parse_with_sniff(registry: &Registry, lines: &[String]) -> (Vec<LogEntry>, String, String) {
     let result = sniff::sniff(registry, lines);
-    let template_id = match &result {
-        SniffResult::AutoMatch { picked, .. } | SniffResult::Suggested { picked, .. } => picked.template_id.clone(),
-        SniffResult::NoMatch { .. } => "unknown".to_string(),
+    let (template_id, kind) = match &result {
+        SniffResult::AutoMatch { picked, .. } => (picked.template_id.clone(), "AutoMatch".to_string()),
+        SniffResult::Suggested { picked, .. } => (picked.template_id.clone(), "Suggested".to_string()),
+        SniffResult::NoMatch { .. } => ("unknown".to_string(), "NoMatch".to_string()),
     };
     let entries = match template_id.as_str() {
         "unknown" => {
@@ -53,7 +55,7 @@ pub fn parse_with_sniff(registry: &Registry, lines: &[String]) -> (Vec<LogEntry>
             parse_with_template(tpl.as_parser(), lines)
         }
     };
-    (entries, template_id)
+    (entries, template_id, kind)
 }
 
 pub fn compute_metadata(path: &str, entries: &[LogEntry], template_id: &str) -> FileMetadata {
@@ -85,6 +87,7 @@ pub fn compute_metadata(path: &str, entries: &[LogEntry], template_id: &str) -> 
         scopes: scope_list,
         scope_counts,
         template_id: template_id.to_string(),
+        sniff_kind: None,
     }
 }
 

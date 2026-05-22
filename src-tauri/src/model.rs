@@ -37,6 +37,10 @@ pub struct FileMetadata {
     /// scope → 出现次数，全文件统计（不随筛选变化）。供 StatsPanel 渲染多选 tag。
     pub scope_counts: HashMap<String, u32>,
     pub template_id: String,
+    /// 嗅探匹配质量："AutoMatch"（≥0.8 置信度）/ "Suggested"（0.4-0.8）/ "NoMatch"（<0.4）
+    /// 仅 cmd_open_file（自动嗅探）流程会赋值；reparse / 测试场景为 None
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sniff_kind: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]

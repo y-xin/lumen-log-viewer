@@ -91,6 +91,7 @@ mod tests {
             path: "/x".into(), total: entries.len() as u32, time_range: None,
             level_counts: HashMap::new(), scopes: vec![],
             scope_counts: HashMap::new(), template_id: "x".into(),
+            sniff_kind: None,
         };
         s.load(md, entries);
         s

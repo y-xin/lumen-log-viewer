@@ -11,6 +11,7 @@ import { RotationDialog } from './components/RotationDialog';
 import { useSession } from './state/session';
 import { useAutoQuery } from './hooks/useAutoQuery';
 import { useTailFollow } from './hooks/useTailFollow';
+import { useTailStatsRefresh } from './hooks/useTailStatsRefresh';
 import { useFileDrop } from './hooks/useFileDrop';
 import { useAutoOpenRecent } from './hooks/useAutoOpenRecent';
 
@@ -19,6 +20,7 @@ export default function App() {
   const [showManager, setShowManager] = useState(false);
   useAutoQuery();
   useTailFollow();
+  useTailStatsRefresh();
   useAutoOpenRecent();
   const isDragging = useFileDrop();
 

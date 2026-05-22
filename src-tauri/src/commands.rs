@@ -459,3 +459,16 @@ pub fn cmd_save_column_visibility(
 ) -> Result<(), AppError> {
     prefs_store.save_column_visibility(visibility)
 }
+
+#[tauri::command]
+pub fn cmd_get_font_size(prefs_store: State<'_, PrefsStore>) -> Option<u32> {
+    prefs_store.get_font_size()
+}
+
+#[tauri::command]
+pub fn cmd_save_font_size(
+    prefs_store: State<'_, PrefsStore>,
+    size: u32,
+) -> Result<(), AppError> {
+    prefs_store.save_font_size(size)
+}

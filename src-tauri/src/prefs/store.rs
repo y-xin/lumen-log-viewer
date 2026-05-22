@@ -63,6 +63,10 @@ pub struct Prefs {
     /// Message 列不在此 map 里管理（永远显示，作为核心信息）。
     #[serde(default)]
     pub column_visibility: Option<HashMap<String, bool>>,
+    /// UI 偏好：日志内容字号（LogList 行 + 详情抽屉 Message/Raw），px
+    /// 范围 10-20；None = 默认 12
+    #[serde(default)]
+    pub font_size: Option<u32>,
 }
 
 const MAX_RECENT_FILES: usize = 10;
@@ -154,6 +158,18 @@ impl PrefsStore {
         self.save(&prefs)
     }
 
+    /// 读字号偏好
+    pub fn get_font_size(&self) -> Option<u32> {
+        self.load().font_size
+    }
+
+    /// 写字号偏好（10-20 px）
+    pub fn save_font_size(&self, size: u32) -> Result<(), AppError> {
+        let mut prefs = self.load();
+        prefs.font_size = Some(size.clamp(10, 20));
+        self.save(&prefs)
+    }
+
     /// 列出某文件下的所有保存筛选，按 created_at 倒序（最新在前）
     pub fn list_filters(&self, file_path: &str) -> Vec<SavedFilter> {
         let prefs = self.load();
@@ -221,6 +237,7 @@ impl Prefs {
             saved_filters: HashMap::new(),
             column_widths: None,
             column_visibility: None,
+            font_size: None,
         }
     }
 }
@@ -297,6 +314,7 @@ mod tests {
             saved_filters: HashMap::new(),
             column_widths: None,
             column_visibility: None,
+            font_size: None,
         };
         store.save(&prefs).unwrap();
         let loaded = store.load();

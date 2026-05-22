@@ -9,6 +9,7 @@ import { HighlightedText } from './HighlightedText';
 
 export function DetailDrawer() {
   const { selectedEntry, setSelectedEntry, patchSpec, spec } = useSession();
+  const fontSize = useSession((s) => s.fontSize);
 
   const [position, setPosition] = useState<number | null>(null);
   const [total, setTotal] = useState<number | null>(null);
@@ -106,7 +107,7 @@ export function DetailDrawer() {
 
         <section>
           <div className="text-xs text-slate-500 mb-1">Message</div>
-          <div className="border rounded p-2 font-mono text-xs whitespace-pre-wrap break-words">
+          <div className="border rounded p-2 font-mono whitespace-pre-wrap break-words" style={{ fontSize }}>
             {entry.message
               ? <HighlightedText text={entry.message} needle={spec.text_search ?? ''} />
               : '(空)'}
@@ -132,9 +133,9 @@ export function DetailDrawer() {
             <span className="text-xs text-slate-500">Raw</span>
             <button onClick={copyRaw} className="text-xs text-blue-600 hover:underline">📋 复制</button>
           </div>
-          <div className="border rounded p-2 font-mono text-xs whitespace-pre-wrap break-words bg-slate-50">
-              <HighlightedText text={entry.raw} needle={spec.text_search ?? ''} />
-            </div>
+          <div className="border rounded p-2 font-mono whitespace-pre-wrap break-words bg-slate-50" style={{ fontSize }}>
+            <HighlightedText text={entry.raw} needle={spec.text_search ?? ''} />
+          </div>
         </section>
 
         <section className="flex gap-2 pt-2">

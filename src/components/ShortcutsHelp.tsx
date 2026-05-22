@@ -17,6 +17,9 @@ const ITEMS: Item[] = [
   { keys: `${M} T`, desc: '切换实时跟踪' },
   { keys: `${M} E`, desc: '打开导出菜单' },
   { keys: `${M} S`, desc: '打开 saved-filter 菜单' },
+  { keys: `${M} =`, desc: '日志字号 +' },
+  { keys: `${M} -`, desc: '日志字号 -' },
+  { keys: `${M} 0`, desc: '日志字号重置' },
   { keys: '?',      desc: '本帮助' },
   { keys: 'Esc',    desc: '关闭抽屉 / 弹窗 / 本帮助' },
 ];

@@ -153,3 +153,11 @@ export async function getColumnVisibility(): Promise<Record<string, boolean> | n
 export async function saveColumnVisibility(visibility: Record<string, boolean>): Promise<void> {
   return invoke<void>('cmd_save_column_visibility', { visibility });
 }
+
+export async function getFontSize(): Promise<number | null> {
+  return invoke<number | null>('cmd_get_font_size');
+}
+
+export async function saveFontSize(size: number): Promise<void> {
+  return invoke<void>('cmd_save_font_size', { size });
+}

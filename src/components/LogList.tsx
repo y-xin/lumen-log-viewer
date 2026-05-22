@@ -9,8 +9,12 @@ import type { LogEntry, LogLevel } from '../types/log';
 import { HighlightedText } from './HighlightedText';
 
 const PAGE_SIZE = 200;
-const ROW_HEIGHT = 28;
-const EXPANDED_LINE_HEIGHT = 16;          // 展开块每额外一行的高度
+const BASE_FONT_PX = 12;
+const BASE_ROW_HEIGHT = 28;
+const BASE_EXPANDED_LINE = 16;
+// 行高 / 展开行高都按 fontSize 同比缩放
+const rowHeightFor = (fs: number) => Math.round((BASE_ROW_HEIGHT / BASE_FONT_PX) * fs);
+const expandedLineFor = (fs: number) => Math.round((BASE_EXPANDED_LINE / BASE_FONT_PX) * fs);
 const EXPANDED_MAX_EXTRA_LINES = 10;       // 单个 entry 展开最多额外显示 10 行（防止占满视口）
 const STATUS_BAR_HEIGHT = 28;
 
@@ -75,6 +79,9 @@ function specKey(s: unknown): string {
 
 export function LogList() {
   const { spec, result, selectedEntry, setSelectedEntry, newEntriesPending, clearNewEntriesPending } = useSession();
+  const fontSize = useSession((s) => s.fontSize);
+  const ROW_HEIGHT = rowHeightFor(fontSize);
+  const EXPANDED_LINE_HEIGHT = expandedLineFor(fontSize);
   const [entries, setEntries] = useState<(LogEntry | undefined)[]>([]);
   const pendingPages = useRef<Set<number>>(new Set());
   const seq = useRef(0);
@@ -228,14 +235,19 @@ export function LogList() {
     listRef.current?.resetAfterIndex(0);
   }, [curKey]);
 
-  // 行高动态计算：折叠 28px / 展开 28 + (line_count-1) * 16，但单 entry 上限 11 行
+  // 行高动态计算：折叠 ROW_HEIGHT / 展开 ROW_HEIGHT + extra * EXPANDED_LINE_HEIGHT
   const getItemSize = useCallback((index: number) => {
     const e = entries[index];
     if (!e || e.line_count <= 1) return ROW_HEIGHT;
     if (!expanded.has(e.line_no)) return ROW_HEIGHT;
     const extra = Math.min(e.line_count - 1, EXPANDED_MAX_EXTRA_LINES);
     return ROW_HEIGHT + extra * EXPANDED_LINE_HEIGHT;
-  }, [entries, expanded]);
+  }, [entries, expanded, ROW_HEIGHT, EXPANDED_LINE_HEIGHT]);
+
+  // 字号变化 → 重算所有行高
+  useEffect(() => {
+    listRef.current?.resetAfterIndex(0);
+  }, [ROW_HEIGHT, EXPANDED_LINE_HEIGHT]);
 
   const toggleExpand = useCallback((lineNo: number) => {
     setExpanded((prev) => {
@@ -314,12 +326,12 @@ export function LogList() {
 
     return (
       <div
-        style={style}
+        style={{ ...style, fontSize }}
         // 用 mousedown 而不是 click：tail-follow 模式下列表持续 scrollToItem，
         // mousedown→mouseup 之间 DOM 已滚动，click 事件不会触发；改用 mousedown 在按下瞬间锁定选择。
         onMouseDown={() => setSelectedEntry(isSelected ? null : e)}
         className={[
-          'text-xs flex flex-col font-mono border-b border-slate-100 cursor-pointer',
+          'flex flex-col font-mono border-b border-slate-100 cursor-pointer',
           isSelected ? 'bg-blue-50' : 'hover:bg-slate-50',
         ].join(' ')}
       >
@@ -360,8 +372,8 @@ export function LogList() {
         </div>
         {isExpanded && restRaw && (
           <div
-            className="font-mono text-xs whitespace-pre text-slate-600 bg-slate-50/60 border-t border-slate-100 overflow-hidden"
-            style={{ paddingLeft: expandedIndent, paddingRight: 8, paddingTop: 2, paddingBottom: 2, lineHeight: `${EXPANDED_LINE_HEIGHT}px` }}
+            className="font-mono whitespace-pre text-slate-600 bg-slate-50/60 border-t border-slate-100 overflow-hidden"
+            style={{ paddingLeft: expandedIndent, paddingRight: 8, paddingTop: 2, paddingBottom: 2, lineHeight: `${EXPANDED_LINE_HEIGHT}px`, fontSize: Math.max(10, fontSize - 1) }}
           >
             <HighlightedText text={restRaw} needle={spec.text_search ?? ''} />
             {truncatedNote && <div className="text-slate-400 italic mt-1">{truncatedNote}</div>}

@@ -16,6 +16,8 @@ import { useFileDrop } from './hooks/useFileDrop';
 import { useAutoOpenRecent } from './hooks/useAutoOpenRecent';
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
 import { ShortcutsHelp } from './components/ShortcutsHelp';
+import { useEffect as useEffectInit } from 'react';
+import { getFontSize, saveFontSize } from './api/commands';
 
 export default function App() {
   const { metadata, loading, error } = useSession();
@@ -26,6 +28,19 @@ export default function App() {
   useAutoOpenRecent();
   useGlobalShortcuts();
   const isDragging = useFileDrop();
+
+  // 启动时拉字号偏好；变化时（⌘+/-/0 触发）静默保存
+  const fontSize = useSession((s) => s.fontSize);
+  const setFontSize = useSession((s) => s.setFontSize);
+  useEffectInit(() => {
+    getFontSize().then((n) => { if (typeof n === 'number') setFontSize(n); }).catch(() => {});
+  }, [setFontSize]);
+  useEffectInit(() => {
+    // 默认 12 不写盘（区分"未保存"与"显式选择 12"无关紧要 — 默认就是 12）
+    if (fontSize !== 12) {
+      saveFontSize(fontSize).catch(() => {});
+    }
+  }, [fontSize]);
 
   return (
     <div className="h-screen flex flex-col bg-slate-50 text-slate-900">

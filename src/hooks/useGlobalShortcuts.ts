@@ -81,6 +81,19 @@ export function useGlobalShortcuts() {
           if (s.metadata) window.dispatchEvent(new CustomEvent('lv:open-saved-filters'));
           e.preventDefault();
           return;
+        case '=':
+        case '+':
+          s.setFontSize(s.fontSize + 1);
+          e.preventDefault();
+          return;
+        case '-':
+          s.setFontSize(s.fontSize - 1);
+          e.preventDefault();
+          return;
+        case '0':
+          s.setFontSize(12);
+          e.preventDefault();
+          return;
       }
     };
 

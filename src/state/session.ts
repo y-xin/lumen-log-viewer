@@ -24,6 +24,8 @@ interface SessionStore {
   newEntriesPending: number;
   /** 快捷键 help overlay 是否打开 */
   helpOpen: boolean;
+  /** 日志内容字号（LogList row + DetailDrawer Message/Raw），px */
+  fontSize: number;
 
   /**
    * 打开新文件用：把 metadata 写入，同时清空 spec / result / 选中行 / 待追加计数。
@@ -45,6 +47,7 @@ interface SessionStore {
   appendEntries: (entries: LogEntry[], total: number) => void;
   clearNewEntriesPending: () => void;
   setHelpOpen: (b: boolean) => void;
+  setFontSize: (n: number) => void;
 }
 
 export const useSession = create<SessionStore>((set) => ({
@@ -61,6 +64,7 @@ export const useSession = create<SessionStore>((set) => ({
   rotationKind: null,
   newEntriesPending: 0,
   helpOpen: false,
+  fontSize: 12,
 
   loadFile: (m) => set({
     metadata: m,
@@ -111,4 +115,5 @@ export const useSession = create<SessionStore>((set) => ({
   })),
   clearNewEntriesPending: () => set({ newEntriesPending: 0 }),
   setHelpOpen: (helpOpen) => set({ helpOpen }),
+  setFontSize: (fontSize) => set({ fontSize: Math.min(20, Math.max(10, fontSize)) }),
 }));

@@ -25,7 +25,7 @@ pub fn cmd_open_file(
 ) -> Result<FileMetadata, AppError> {
     let lines = reader::read_all_lines(Path::new(&path))?;
     let entries = parser::parse_lines(&lines);
-    let metadata = parser::compute_metadata(&path, &entries);
+    let metadata = parser::compute_metadata(&path, &entries, "json-lines");
     state.load(metadata.clone(), entries);
     Ok(metadata)
 }

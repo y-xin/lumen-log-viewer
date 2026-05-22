@@ -13,7 +13,7 @@ use std::path::Path;
 fn end_to_end_open_filter_aggregate() {
     let lines = reader::read_all_lines(Path::new("tests/fixtures/sample.jsonl")).unwrap();
     let entries = parser::parse_lines(&lines);
-    let meta = parser::compute_metadata("tests/fixtures/sample.jsonl", &entries);
+    let meta = parser::compute_metadata("tests/fixtures/sample.jsonl", &entries, "json-lines");
 
     let s = SessionState::default();
     s.load(meta, entries);

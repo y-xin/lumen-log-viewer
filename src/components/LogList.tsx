@@ -78,10 +78,13 @@ function specKey(s: unknown): string {
 }
 
 export function LogList() {
-  const { spec, result, selectedEntry, setSelectedEntry, newEntriesPending, clearNewEntriesPending } = useSession();
+  const { spec, result, selectedEntry, setSelectedEntry, newEntriesPending, clearNewEntriesPending, metadata } = useSession();
   const fontSize = useSession((s) => s.fontSize);
   const ROW_HEIGHT = rowHeightFor(fontSize);
   const EXPANDED_LINE_HEIGHT = expandedLineFor(fontSize);
+  // Raw 模式：嗅探完全 NoMatch 时，列表退化为 "行号 + 原始内容" 单列展示
+  // 隐藏 time / level / scope 列以及 ⚙ 菜单（在该模式下没意义）
+  const rawMode = metadata?.sniff_kind === 'NoMatch';
   const [entries, setEntries] = useState<(LogEntry | undefined)[]>([]);
   const pendingPages = useRef<Set<number>>(new Set());
   const seq = useRef(0);
@@ -344,6 +347,27 @@ export function LogList() {
       truncatedNote = `… 余 ${restLines.length - EXPANDED_MAX_EXTRA_LINES} 行未显示（查看详情抽屉 Raw 区）`;
     }
 
+    // Raw 模式：单列渲染 line_no + raw（高亮关键词），无多余字段
+    if (rawMode) {
+      return (
+        <div
+          style={{ ...style, fontSize, height: ROW_HEIGHT }}
+          onMouseDown={() => setSelectedEntry(isSelected ? null : e)}
+          className={[
+            'px-2 flex items-center gap-2 font-mono border-b border-slate-100 cursor-pointer',
+            isSelected ? 'bg-blue-50' : 'hover:bg-slate-50',
+          ].join(' ')}
+        >
+          <span className="text-slate-400 text-right pr-2 shrink-0" style={{ minWidth: 56 }}>
+            {lineLabel(e)}
+          </span>
+          <span className="flex-1 truncate" title={e.raw}>
+            <HighlightedText text={e.raw} needle={spec.text_search ?? ''} />
+          </span>
+        </div>
+      );
+    }
+
     return (
       <div
         style={{ ...style, fontSize }}
@@ -408,7 +432,13 @@ export function LogList() {
   const showJumpToBottom = !atBottom && result.total_matched > 0;
 
   // 表头：与 Row 列宽对齐，列之间放可拖动的 resizer；最右侧 ⚙ 控制列显隐
-  const Header = () => (
+  // Raw 模式下大幅简化（只 "行号 | Raw" 一行说明）
+  const Header = () => rawMode ? (
+    <div className="flex items-center text-xs font-medium text-slate-500 bg-slate-50 border-b border-slate-200 select-none gap-2 px-2 py-1">
+      <span className="shrink-0" style={{ minWidth: 56, textAlign: 'right' }}>行号</span>
+      <span className="flex-1">Raw 内容（嗅探未识别格式，按原文展示）</span>
+    </div>
+  ) : (
     <div className="flex items-stretch text-xs font-medium text-slate-500 bg-slate-50 border-b border-slate-200 select-none relative">
       {visibility.line && (
         <>

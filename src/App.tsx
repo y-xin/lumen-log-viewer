@@ -60,7 +60,8 @@ export default function App() {
       )}
       {metadata && <SniffQualityBanner />}
       {metadata && <FilterBar />}
-      {metadata && <StatsPanel />}
+      {/* Raw 模式（sniff=NoMatch）下 StatsPanel 没意义（level 全 unknown / scope 空）— 直接隐藏 */}
+      {metadata && metadata.sniff_kind !== 'NoMatch' && <StatsPanel />}
       {metadata ? <LogList /> : (
         <main className="flex-1 flex items-center justify-center text-slate-400">
           {loading ? '加载中…' : '点击"打开日志文件"开始'}

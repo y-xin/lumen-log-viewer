@@ -10,7 +10,8 @@ use crate::prefs::{CustomTemplate, PrefsStore};
 use crate::query::{self, QuerySpec};
 use crate::session::SessionState;
 use crate::stats;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use std::io::{BufWriter, Write};
 use std::path::Path;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -38,6 +39,20 @@ pub struct EntriesAppendedPayload {
 #[derive(Serialize, Clone)]
 pub struct FileRotatedPayload {
     pub kind: String,    // "Truncated" / "InodeChanged" / "Removed"
+}
+
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExportFormat {
+    Csv,
+    Jsonl,
+    JsonArray,
+}
+
+#[derive(Serialize)]
+pub struct ExportResult {
+    pub count: u32,
+    pub bytes_written: u64,
 }
 
 const BUILTIN_IDS: &[&str] = &[
@@ -328,4 +343,27 @@ pub fn cmd_stop_follow(
         let _ = state.flush_incremental(tpl_arc.as_parser());
     }
     state.remove_watcher()
+}
+
+#[tauri::command]
+pub fn cmd_export(
+    spec: QuerySpec,
+    format: ExportFormat,
+    path: String,
+    state: State<'_, SessionState>,
+) -> Result<ExportResult, AppError> {
+    let matched = query::run_query(&state, &spec)?;
+    let file = std::fs::File::create(&path)
+        .map_err(|e| AppError::Io(format!("创建导出文件失败：{e}")))?;
+    let mut w = BufWriter::new(file);
+    state.with_entries(|entries| -> std::io::Result<()> {
+        match format {
+            ExportFormat::Csv       => crate::export::export_csv(entries, &matched, &mut w),
+            ExportFormat::Jsonl     => crate::export::export_jsonl(entries, &matched, &mut w),
+            ExportFormat::JsonArray => crate::export::export_json_array(entries, &matched, &mut w),
+        }
+    })?.map_err(|e| AppError::Io(format!("写入导出文件失败：{e}")))?;
+    w.flush().map_err(|e| AppError::Io(format!("flush 失败：{e}")))?;
+    let bytes_written = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+    Ok(ExportResult { count: matched.len() as u32, bytes_written })
 }

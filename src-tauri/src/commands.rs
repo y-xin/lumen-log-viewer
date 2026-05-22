@@ -4,6 +4,7 @@ use crate::error::AppError;
 use crate::loader::reader;
 use crate::model::{FileMetadata, LogEntry, Stats};
 use crate::parser;
+use crate::parser::registry::Registry;
 use crate::query::{self, QuerySpec};
 use crate::session::SessionState;
 use crate::stats;
@@ -22,11 +23,12 @@ pub struct QueryResponse {
 pub fn cmd_open_file(
     path: String,
     state: State<'_, SessionState>,
+    registry: State<'_, Registry>,
 ) -> Result<FileMetadata, AppError> {
     let lines = reader::read_all_lines(Path::new(&path))?;
-    let entries = parser::parse_lines(&lines);
-    let metadata = parser::compute_metadata(&path, &entries, "json-lines");
-    state.load(metadata.clone(), entries);
+    let (entries, template_id) = parser::parse_with_sniff(&registry, &lines);
+    let metadata = parser::compute_metadata(&path, &entries, &template_id);
+    state.load_with_lines(metadata.clone(), entries, lines);
     Ok(metadata)
 }
 

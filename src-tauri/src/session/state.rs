@@ -14,16 +14,22 @@ pub struct SessionInner {
     pub metadata: FileMetadata,
     pub entries: Arc<Vec<LogEntry>>,
     pub cache: HashMap<u64, Arc<Vec<u32>>>, // QuerySpec hash → matched line indices
+    pub lines: Arc<Vec<String>>,            // 原始行缓存，供重新解析使用
 }
 
 impl SessionState {
-    pub fn load(&self, metadata: FileMetadata, entries: Vec<LogEntry>) {
+    pub fn load_with_lines(&self, metadata: FileMetadata, entries: Vec<LogEntry>, lines: Vec<String>) {
         let mut w = self.0.write();
         *w = Some(SessionInner {
             metadata,
             entries: Arc::new(entries),
             cache: HashMap::new(),
+            lines: Arc::new(lines),
         });
+    }
+
+    pub fn load(&self, metadata: FileMetadata, entries: Vec<LogEntry>) {
+        self.load_with_lines(metadata, entries, vec![])
     }
 
     pub fn with_entries<F, R>(&self, f: F) -> Result<R, AppError>
@@ -37,6 +43,12 @@ impl SessionState {
         let r = self.0.read();
         let inner = r.as_ref().ok_or(AppError::NoSession)?;
         Ok(inner.metadata.clone())
+    }
+
+    pub fn lines(&self) -> Result<Arc<Vec<String>>, AppError> {
+        let r = self.0.read();
+        let inner = r.as_ref().ok_or(AppError::NoSession)?;
+        Ok(inner.lines.clone())
     }
 
     /// 查询缓存：命中返回索引数组；未命中调用 compute 算并写回

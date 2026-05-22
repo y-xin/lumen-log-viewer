@@ -12,6 +12,8 @@ use crate::model::{FileMetadata, LogEntry, LogLevel};
 use grouping::group_records;
 use json_lines::JsonLinesTemplate;
 use rayon::prelude::*;
+use registry::Registry;
+use sniff::SniffResult;
 use std::collections::{HashMap, HashSet};
 use template::ParserTemplate;
 
@@ -33,6 +35,25 @@ pub fn parse_with_template<T: ParserTemplate + ?Sized + Sync>(
 /// MVP 兼容入口：用 JsonLinesTemplate 解析。Task 4.3 后会被 sniff-based 入口取代。
 pub fn parse_lines(lines: &[String]) -> Vec<LogEntry> {
     parse_with_template(&JsonLinesTemplate, lines)
+}
+
+/// 嗅探后用最高分模板解析。如果完全无匹配，回退到把每行作为 Unknown fallback。
+pub fn parse_with_sniff(registry: &Registry, lines: &[String]) -> (Vec<LogEntry>, String) {
+    let result = sniff::sniff(registry, lines);
+    let template_id = match &result {
+        SniffResult::AutoMatch { picked, .. } | SniffResult::Suggested { picked, .. } => picked.template_id.clone(),
+        SniffResult::NoMatch { .. } => "unknown".to_string(),
+    };
+    let entries = match template_id.as_str() {
+        "unknown" => {
+            lines.iter().enumerate().map(|(i, l)| template::fallback((i + 1) as u32, 1, l)).collect()
+        }
+        id => {
+            let tpl = registry.find(id).expect("registry must contain picked template");
+            parse_with_template(tpl.as_parser(), lines)
+        }
+    };
+    (entries, template_id)
 }
 
 pub fn compute_metadata(path: &str, entries: &[LogEntry], template_id: &str) -> FileMetadata {

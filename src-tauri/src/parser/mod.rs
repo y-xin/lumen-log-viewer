@@ -1,6 +1,7 @@
 pub mod template;
 pub mod json_lines;
 pub mod level;
+pub mod grouping;
 
 use crate::model::{FileMetadata, LogEntry, LogLevel};
 use json_lines::JsonLinesTemplate;

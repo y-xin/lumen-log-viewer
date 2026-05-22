@@ -62,6 +62,26 @@ export function DetailDrawer() {
     navigator.clipboard.writeText(entry.raw).catch(() => {});
   };
 
+  const copyAsJson = () => {
+    // 序列化整个 entry：fields / scope / level / line_no / raw / timestamp
+    const json = JSON.stringify(entry, null, 2);
+    navigator.clipboard.writeText(json).catch(() => {});
+  };
+
+  const exportEntry = () => {
+    // 导出单条 entry 为 JSON 文件（用 anchor download，不需要 tauri save 对话框 — 直接落到浏览器默认下载位置/Tauri 也支持）
+    const json = JSON.stringify(entry, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `entry-${entry.line_no}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   // 不用 overlay：列表区保持可交互，点别的行可以直接切换详情。
   // 关闭路径：右上 ✕、Esc（useKeyboardNav）、再点一次同一行（LogList 行 toggle）。
   return (
@@ -129,9 +149,13 @@ export function DetailDrawer() {
         )}
 
         <section>
-          <div className="flex items-center justify-between mb-1">
+          <div className="flex items-center justify-between mb-1 gap-2">
             <span className="text-xs text-slate-500">Raw</span>
-            <button onClick={copyRaw} className="text-xs text-blue-600 hover:underline">📋 复制</button>
+            <div className="flex items-center gap-2 text-xs">
+              <button onClick={copyRaw} className="text-blue-600 hover:underline">📋 raw</button>
+              <button onClick={copyAsJson} className="text-blue-600 hover:underline">📋 JSON</button>
+              <button onClick={exportEntry} className="text-blue-600 hover:underline">💾 导出</button>
+            </div>
           </div>
           <div className="border rounded p-2 font-mono whitespace-pre-wrap break-words bg-slate-50" style={{ fontSize }}>
             <HighlightedText text={entry.raw} needle={spec.text_search ?? ''} />

@@ -5,6 +5,7 @@ import { StatsPanel } from './components/StatsPanel';
 import { LogList } from './components/LogList';
 import { TemplateMenu } from './components/TemplateMenu';
 import { TemplateManagerDialog } from './components/TemplateManagerDialog';
+import { DetailDrawer } from './components/DetailDrawer';
 import { useSession } from './state/session';
 import { useAutoQuery } from './hooks/useAutoQuery';
 
@@ -35,6 +36,7 @@ export default function App() {
       )}
 
       {showManager && <TemplateManagerDialog onClose={() => setShowManager(false)} />}
+      <DetailDrawer />
     </div>
   );
 }

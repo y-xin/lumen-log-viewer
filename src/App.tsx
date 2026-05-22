@@ -4,6 +4,7 @@ import { FilterBar } from './components/FilterBar';
 import { StatsPanel } from './components/StatsPanel';
 import { LogList } from './components/LogList';
 import { TemplateMenu } from './components/TemplateMenu';
+import { TemplateManagerDialog } from './components/TemplateManagerDialog';
 import { useSession } from './state/session';
 import { useAutoQuery } from './hooks/useAutoQuery';
 
@@ -33,20 +34,7 @@ export default function App() {
         </main>
       )}
 
-      {/* 模板管理对话框占位 — Task 7.4 替换 */}
-      {showManager && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-30">
-          <div className="bg-white p-6 rounded shadow-lg">
-            <p>模板管理对话框（Task 7.4）</p>
-            <button
-              className="mt-3 px-3 py-1 bg-slate-200 rounded"
-              onClick={() => setShowManager(false)}
-            >
-              关闭
-            </button>
-          </div>
-        </div>
-      )}
+      {showManager && <TemplateManagerDialog onClose={() => setShowManager(false)} />}
     </div>
   );
 }

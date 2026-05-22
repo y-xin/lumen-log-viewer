@@ -121,6 +121,63 @@ impl PrefsStore {
         prefs.recent_files.clear();
         self.save(&prefs)
     }
+
+    /// 列出某文件下的所有保存筛选，按 created_at 倒序（最新在前）
+    pub fn list_filters(&self, file_path: &str) -> Vec<SavedFilter> {
+        let prefs = self.load();
+        let mut v = prefs.saved_filters.get(file_path).cloned().unwrap_or_default();
+        v.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        v
+    }
+
+    /// 追加保存（id 重复时覆盖原条目），返回更新后排序好的列表
+    pub fn save_filter(
+        &self,
+        file_path: &str,
+        filter: SavedFilter,
+    ) -> Result<Vec<SavedFilter>, AppError> {
+        let mut prefs = self.load();
+        let v = prefs.saved_filters.entry(file_path.to_string()).or_default();
+        v.retain(|f| f.id != filter.id);
+        v.push(filter);
+        self.save(&prefs)?;
+        Ok(self.list_filters(file_path))
+    }
+
+    /// 按 id 删除；找不到 id 不报错（幂等）
+    pub fn delete_filter(
+        &self,
+        file_path: &str,
+        id: &str,
+    ) -> Result<Vec<SavedFilter>, AppError> {
+        let mut prefs = self.load();
+        if let Some(v) = prefs.saved_filters.get_mut(file_path) {
+            v.retain(|f| f.id != id);
+        }
+        self.save(&prefs)?;
+        Ok(self.list_filters(file_path))
+    }
+
+    /// 按 id 重命名；找不到返回 Err
+    pub fn rename_filter(
+        &self,
+        file_path: &str,
+        id: &str,
+        new_name: &str,
+    ) -> Result<Vec<SavedFilter>, AppError> {
+        let mut prefs = self.load();
+        let v = prefs
+            .saved_filters
+            .get_mut(file_path)
+            .ok_or_else(|| AppError::Internal(format!("文件无任何保存筛选：{file_path}")))?;
+        let target = v
+            .iter_mut()
+            .find(|f| f.id == id)
+            .ok_or_else(|| AppError::Internal(format!("找不到 saved filter id={id}")))?;
+        target.name = new_name.to_string();
+        self.save(&prefs)?;
+        Ok(self.list_filters(file_path))
+    }
 }
 
 impl Prefs {

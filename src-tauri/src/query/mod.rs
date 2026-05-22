@@ -14,7 +14,7 @@ use std::sync::Arc;
 pub fn run_query(session: &SessionState, spec: &QuerySpec) -> Result<Arc<Vec<u32>>, AppError> {
     let key = spec.cache_key();
     let scope_re = filter::compile_scope_regex(spec);
-    session.cached_or_compute(key, |entries: &Arc<Vec<LogEntry>>| {
+    session.cached_or_compute(key, |entries: &[LogEntry]| {
         entries.par_iter()
             .enumerate()
             .filter(|(_, e)| filter::matches(e, spec, &scope_re))

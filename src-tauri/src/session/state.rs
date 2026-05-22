@@ -1,7 +1,8 @@
 // SessionState：进程级单例（通过 Tauri State 注入）
-// 保存当前打开文件的所有 LogEntry + 元数据 + 查询缓存
+// 保存当前打开文件的所有 LogEntry + 元数据 + 查询缓存 + watcher 句柄
 
 use crate::error::AppError;
+use crate::loader::reader::{self};
 use crate::model::{FileMetadata, LogEntry};
 use parking_lot::RwLock;
 use std::collections::HashMap;
@@ -12,31 +13,42 @@ pub struct SessionState(RwLock<Option<SessionInner>>);
 
 pub struct SessionInner {
     pub metadata: FileMetadata,
-    pub entries: Arc<Vec<LogEntry>>,
-    pub cache: HashMap<u64, Arc<Vec<u32>>>, // QuerySpec hash → matched line indices
-    pub lines: Arc<Vec<String>>,            // 原始行缓存，供重新解析使用
+    pub entries: Arc<RwLock<Vec<LogEntry>>>,
+    pub cache: HashMap<u64, Arc<Vec<u32>>>,
+    pub lines: Arc<Vec<String>>,
+    pub watcher: Option<crate::loader::watcher::FileWatcher>,
+    pub incremental: Option<crate::loader::incremental::IncrementalParser>,
+    pub last_offset: u64,
+    pub last_inode: u64,
 }
 
 impl SessionState {
     pub fn load_with_lines(&self, metadata: FileMetadata, entries: Vec<LogEntry>, lines: Vec<String>) {
+        let initial_meta = reader::file_meta(std::path::Path::new(&metadata.path))
+            .unwrap_or(reader::FileMeta { size: 0, inode: 0 });
         let mut w = self.0.write();
         *w = Some(SessionInner {
             metadata,
-            entries: Arc::new(entries),
+            entries: Arc::new(RwLock::new(entries)),
             cache: HashMap::new(),
             lines: Arc::new(lines),
+            watcher: None,
+            incremental: None,
+            last_offset: initial_meta.size,
+            last_inode: initial_meta.inode,
         });
     }
 
     pub fn load(&self, metadata: FileMetadata, entries: Vec<LogEntry>) {
-        self.load_with_lines(metadata, entries, vec![])
+        self.load_with_lines(metadata, entries, vec![]);
     }
 
     pub fn with_entries<F, R>(&self, f: F) -> Result<R, AppError>
-    where F: FnOnce(&Arc<Vec<LogEntry>>) -> R {
+    where F: FnOnce(&[LogEntry]) -> R {
         let r = self.0.read();
         let inner = r.as_ref().ok_or(AppError::NoSession)?;
-        Ok(f(&inner.entries))
+        let entries = inner.entries.read();
+        Ok(f(&entries))
     }
 
     pub fn metadata(&self) -> Result<FileMetadata, AppError> {
@@ -51,10 +63,8 @@ impl SessionState {
         Ok(inner.lines.clone())
     }
 
-    /// 查询缓存：命中返回索引数组；未命中调用 compute 算并写回
     pub fn cached_or_compute<F>(&self, key: u64, compute: F) -> Result<Arc<Vec<u32>>, AppError>
-    where F: FnOnce(&Arc<Vec<LogEntry>>) -> Vec<u32> {
-        // 读：命中直接返回
+    where F: FnOnce(&[LogEntry]) -> Vec<u32> {
         {
             let r = self.0.read();
             let inner = r.as_ref().ok_or(AppError::NoSession)?;
@@ -62,15 +72,89 @@ impl SessionState {
                 return Ok(hit.clone());
             }
         }
-        // 未命中：写锁下计算
         let mut w = self.0.write();
         let inner = w.as_mut().ok_or(AppError::NoSession)?;
         if let Some(hit) = inner.cache.get(&key) {
-            return Ok(hit.clone()); // double-check
+            return Ok(hit.clone());
         }
-        let result = Arc::new(compute(&inner.entries));
+        let result = {
+            let entries = inner.entries.read();
+            Arc::new(compute(&entries))
+        };
         inner.cache.insert(key, result.clone());
         Ok(result)
+    }
+
+    pub fn install_watcher(
+        &self,
+        watcher: crate::loader::watcher::FileWatcher,
+        incremental: crate::loader::incremental::IncrementalParser,
+    ) -> Result<(), AppError> {
+        let mut w = self.0.write();
+        let inner = w.as_mut().ok_or(AppError::NoSession)?;
+        inner.watcher = Some(watcher);
+        inner.incremental = Some(incremental);
+        Ok(())
+    }
+
+    pub fn remove_watcher(&self) -> Result<(), AppError> {
+        let mut w = self.0.write();
+        let inner = w.as_mut().ok_or(AppError::NoSession)?;
+        inner.watcher = None;
+        inner.incremental = None;
+        Ok(())
+    }
+
+    pub fn is_following(&self) -> bool {
+        let r = self.0.read();
+        r.as_ref().map(|i| i.watcher.is_some()).unwrap_or(false)
+    }
+
+    /// 给 watcher 回调用的：拿 incremental 处理 chunk + 追加结果。
+    /// 内部分两次 write lock 避免借用冲突（incremental.as_mut() 与 entries.write() 同时持有会失败）。
+    pub fn feed_chunk<T: crate::parser::template::ParserTemplate + ?Sized + Sync>(
+        &self,
+        tpl: &T,
+        chunk: &str,
+    ) -> Result<Vec<LogEntry>, AppError> {
+        let new_entries = {
+            let mut w = self.0.write();
+            let inner = w.as_mut().ok_or(AppError::NoSession)?;
+            let inc = inner.incremental.as_mut()
+                .ok_or_else(|| AppError::Internal("watcher 未启动".into()))?;
+            inc.feed(tpl, chunk)
+        };
+        self.append_internal(&new_entries)?;
+        Ok(new_entries)
+    }
+
+    pub fn flush_incremental<T: crate::parser::template::ParserTemplate + ?Sized + Sync>(
+        &self,
+        tpl: &T,
+    ) -> Result<Vec<LogEntry>, AppError> {
+        let new_entries = {
+            let mut w = self.0.write();
+            let inner = w.as_mut().ok_or(AppError::NoSession)?;
+            let inc = inner.incremental.as_mut()
+                .ok_or_else(|| AppError::Internal("watcher 未启动".into()))?;
+            inc.flush(tpl)
+        };
+        self.append_internal(&new_entries)?;
+        Ok(new_entries)
+    }
+
+    fn append_internal(&self, new_entries: &[LogEntry]) -> Result<(), AppError> {
+        if new_entries.is_empty() { return Ok(()); }
+        let mut w = self.0.write();
+        let inner = w.as_mut().ok_or(AppError::NoSession)?;
+        {
+            let mut entries = inner.entries.write();
+            entries.extend(new_entries.iter().cloned());
+        }
+        inner.cache.clear();
+        let new_total = inner.entries.read().len() as u32;
+        inner.metadata.total = new_total;
+        Ok(())
     }
 }
 

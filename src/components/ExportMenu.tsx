@@ -1,7 +1,7 @@
 // 导出菜单：在 FilterBar 右侧。选格式 → tauri save dialog → 调 cmd_export
 // 期间按钮显示 spinner；完成显示一行 inline toast，3 秒消失
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { save } from '@tauri-apps/plugin-dialog';
 import { exportToFile } from '../api/commands';
 import { useSession } from '../state/session';
@@ -34,6 +34,13 @@ export function ExportMenu() {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+
+  // 接收 ⌘E 全局快捷键：打开下拉
+  useEffect(() => {
+    const handler = () => setOpen(true);
+    window.addEventListener('lv:open-export', handler);
+    return () => window.removeEventListener('lv:open-export', handler);
+  }, []);
 
   if (!metadata) return null;
 

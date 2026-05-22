@@ -14,6 +14,8 @@ export interface QuerySpec {
   time_range?: [string, string] | null;   // RFC3339 字符串
   levels?: LogLevel[] | null;
   scope_filter?: ScopeFilter | null;
+  /** 多选 scope 白名单（StatsPanel 的 tag 多选）。与 scope_filter 是 AND 关系。 */
+  scope_in?: string[] | null;
   text_search?: string | null;
 }
 
@@ -34,6 +36,8 @@ export interface FileMetadata {
   time_range: [string, string] | null;
   level_counts: Partial<Record<LogLevel, number>>;
   scopes: string[];
+  /** scope → 出现次数，全文件统计（不随筛选变化），供 StatsPanel 多选 tag 渲染。 */
+  scope_counts: Record<string, number>;
   template_id: string;
 }
 

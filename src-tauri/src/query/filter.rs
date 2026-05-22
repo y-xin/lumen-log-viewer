@@ -17,7 +17,14 @@ pub fn matches(entry: &LogEntry, spec: &QuerySpec, scope_re: &Option<Regex>) -> 
     if let Some(levels) = &spec.levels {
         if !levels.contains(&entry.level) { return false; }
     }
-    // Scope
+    // Scope: 多选白名单（来自 StatsPanel）
+    if let Some(allowed) = &spec.scope_in {
+        if !allowed.is_empty() {
+            let Some(s) = entry.scope.as_deref() else { return false; };
+            if !allowed.contains(s) { return false; }
+        }
+    }
+    // Scope: 单 pattern（来自 FilterBar，与 scope_in AND 关系）
     if let Some(sf) = &spec.scope_filter {
         if !scope_matches(entry, sf, scope_re) { return false; }
     }
@@ -171,5 +178,47 @@ mod tests {
         let e = entry(LogLevel::Info, None, "Login Failed");
         let spec = QuerySpec { text_search: Some("login".into()), ..Default::default() };
         assert!(matches(&e, &spec, &None));
+    }
+
+    #[test]
+    fn scope_in_allows_only_listed_scopes() {
+        let a = entry(LogLevel::Info, Some("auth"), "x");
+        let b = entry(LogLevel::Info, Some("db"), "x");
+        let c = entry(LogLevel::Info, Some("http"), "x");
+        let mut allowed = HashSet::new();
+        allowed.insert("auth".to_string());
+        allowed.insert("db".to_string());
+        let spec = QuerySpec { scope_in: Some(allowed), ..Default::default() };
+        assert!(matches(&a, &spec, &None));
+        assert!(matches(&b, &spec, &None));
+        assert!(!matches(&c, &spec, &None));
+    }
+
+    #[test]
+    fn empty_scope_in_set_matches_nothing() {
+        // 空集合 = "选中了 0 个" → 没有 entry 能命中（与 None=不限相反）
+        let e = entry(LogLevel::Info, Some("auth"), "x");
+        let spec = QuerySpec { scope_in: Some(HashSet::new()), ..Default::default() };
+        // 实现里空集合被视为"不过滤"，这是为了让前端 toggle 全部清空时等价于 None
+        assert!(matches(&e, &spec, &None));
+    }
+
+    #[test]
+    fn scope_in_and_pattern_are_and() {
+        // 必须 scope ∈ scope_in 且 满足 pattern
+        let auth = entry(LogLevel::Info, Some("auth"), "x");
+        let dbpool = entry(LogLevel::Info, Some("db.pool"), "x");
+        let mut allowed = HashSet::new();
+        allowed.insert("auth".to_string());
+        allowed.insert("db.pool".to_string());
+        let spec = QuerySpec {
+            scope_in: Some(allowed),
+            scope_filter: Some(ScopeFilter {
+                field_name: "scope".into(), pattern: "db.*".into(), mode: MatchMode::Glob,
+            }),
+            ..Default::default()
+        };
+        assert!(!matches(&auth, &spec, &None));   // 在 scope_in 但 pattern 不匹配
+        assert!(matches(&dbpool, &spec, &None));  // 两者都满足
     }
 }

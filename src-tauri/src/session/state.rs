@@ -184,6 +184,7 @@ mod tests {
             time_range: None,
             level_counts: HashMap::new(),
             scopes: vec![],
+            scope_counts: HashMap::new(),
             template_id: "json-lines".into(),
         }
     }

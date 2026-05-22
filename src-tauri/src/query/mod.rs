@@ -41,7 +41,8 @@ mod tests {
         let s = SessionState::default();
         let meta = FileMetadata {
             path: "/x".into(), total: 3, time_range: None,
-            level_counts: HashMap::new(), scopes: vec![], template_id: "json-lines".into(),
+            level_counts: HashMap::new(), scopes: vec![], scope_counts: HashMap::new(),
+            template_id: "json-lines".into(),
         };
         s.load(meta, vec![
             e(LogLevel::Info, None, "a"),

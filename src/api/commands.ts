@@ -12,12 +12,13 @@ import type {
   TestResult,
 } from '../types/log';
 
-/** 序列化 QuerySpec 时 levels 由数组转为后端可接受形态 */
+/** 序列化 QuerySpec 时 levels / scope_in 由数组转为后端可接受形态 */
 function serializeSpec(spec: QuerySpec): unknown {
   return {
     time_range: spec.time_range ?? null,
     levels: spec.levels ?? null,
     scope_filter: spec.scope_filter ?? null,
+    scope_in: spec.scope_in ?? null,
     text_search: spec.text_search ?? null,
   };
 }

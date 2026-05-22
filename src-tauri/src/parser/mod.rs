@@ -14,7 +14,7 @@ use json_lines::JsonLinesTemplate;
 use rayon::prelude::*;
 use registry::Registry;
 use sniff::SniffResult;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use template::ParserTemplate;
 
 /// 用指定模板对 lines 做两阶段解析：先按 is_record_start 合并，再并行解析。
@@ -58,12 +58,14 @@ pub fn parse_with_sniff(registry: &Registry, lines: &[String]) -> (Vec<LogEntry>
 
 pub fn compute_metadata(path: &str, entries: &[LogEntry], template_id: &str) -> FileMetadata {
     let mut level_counts: HashMap<LogLevel, u32> = HashMap::new();
-    let mut scopes: HashSet<String> = HashSet::new();
+    let mut scope_counts: HashMap<String, u32> = HashMap::new();
     let mut min_t = None;
     let mut max_t = None;
     for e in entries {
         *level_counts.entry(e.level).or_insert(0) += 1;
-        if let Some(s) = &e.scope { scopes.insert(s.clone()); }
+        if let Some(s) = &e.scope {
+            *scope_counts.entry(s.clone()).or_insert(0) += 1;
+        }
         if let Some(t) = e.timestamp {
             min_t = Some(min_t.map(|m: chrono::DateTime<chrono::Utc>| m.min(t)).unwrap_or(t));
             max_t = Some(max_t.map(|m: chrono::DateTime<chrono::Utc>| m.max(t)).unwrap_or(t));
@@ -73,7 +75,7 @@ pub fn compute_metadata(path: &str, entries: &[LogEntry], template_id: &str) -> 
         (Some(a), Some(b)) => Some((a, b)),
         _ => None,
     };
-    let mut scope_list: Vec<String> = scopes.into_iter().collect();
+    let mut scope_list: Vec<String> = scope_counts.keys().cloned().collect();
     scope_list.sort();
     FileMetadata {
         path: path.to_string(),
@@ -81,6 +83,7 @@ pub fn compute_metadata(path: &str, entries: &[LogEntry], template_id: &str) -> 
         time_range,
         level_counts,
         scopes: scope_list,
+        scope_counts,
         template_id: template_id.to_string(),
     }
 }

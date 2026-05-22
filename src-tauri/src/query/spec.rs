@@ -10,7 +10,12 @@ use std::hash::{Hash, Hasher};
 pub struct QuerySpec {
     pub time_range: Option<(DateTime<Utc>, DateTime<Utc>)>,
     pub levels: Option<HashSet<LogLevel>>,
+    /// 单一 pattern 模式（exact/glob/regex），来自 FilterBar 输入框
     pub scope_filter: Option<ScopeFilter>,
+    /// 多选 scope 白名单（来自 StatsPanel 的 Top scope tag 多选）。
+    /// 与 `scope_filter` 是 AND 关系；非空时 entry.scope 必须命中其中之一。
+    #[serde(default)]
+    pub scope_in: Option<HashSet<String>>,
     pub text_search: Option<String>,
 }
 

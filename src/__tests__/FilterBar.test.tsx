@@ -9,7 +9,7 @@ describe('FilterBar', () => {
     useSession.setState({
       metadata: {
         path: '/x', total: 0, time_range: null, level_counts: {},
-        scopes: [], template_id: 'json-lines',
+        scopes: [], scope_counts: {}, template_id: 'json-lines',
       },
       spec: { levels: ['info', 'warn'] },
     });

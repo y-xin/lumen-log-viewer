@@ -34,6 +34,8 @@ pub struct FileMetadata {
     pub time_range: Option<(DateTime<Utc>, DateTime<Utc>)>,
     pub level_counts: HashMap<LogLevel, u32>,
     pub scopes: Vec<String>,
+    /// scope → 出现次数，全文件统计（不随筛选变化）。供 StatsPanel 渲染多选 tag。
+    pub scope_counts: HashMap<String, u32>,
     pub template_id: String,
 }
 

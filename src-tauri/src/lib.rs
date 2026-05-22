@@ -37,6 +37,8 @@ pub fn run() {
             commands::cmd_get_page,
             commands::cmd_list_templates,
             commands::cmd_reparse_with_template,
+            commands::cmd_save_custom_template,
+            commands::cmd_delete_custom_template,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

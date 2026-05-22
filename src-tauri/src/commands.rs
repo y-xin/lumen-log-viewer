@@ -5,6 +5,7 @@ use crate::loader::reader;
 use crate::model::{FileMetadata, LogEntry, Stats};
 use crate::parser;
 use crate::parser::registry::Registry;
+use crate::prefs::{CustomTemplate, PrefsStore};
 use crate::query::{self, QuerySpec};
 use crate::session::SessionState;
 use crate::stats;
@@ -115,4 +116,43 @@ pub fn cmd_reparse_with_template(
     let metadata = parser::compute_metadata(&old_meta.path, &entries, &template_id);
     state.load_with_lines(metadata.clone(), entries, lines.to_vec());
     Ok(metadata)
+}
+
+#[tauri::command]
+pub fn cmd_save_custom_template(
+    tpl: CustomTemplate,
+    registry: State<'_, Registry>,
+    prefs_store: State<'_, PrefsStore>,
+) -> Result<(), AppError> {
+    // 1. 编译验证
+    let rt = crate::prefs::store::compile_custom_template(&tpl)?;
+    // 2. 不允许覆盖内置 id
+    if BUILTIN_IDS.contains(&tpl.id.as_str()) {
+        return Err(AppError::Parse(format!("不能使用内置 ID：{}", tpl.id)));
+    }
+    // 3. 注册表：先 remove 同 id（如果是更新），再 add
+    registry.remove(&tpl.id);
+    registry.add(crate::parser::registry::Tpl::Regex(rt));
+    // 4. 持久化
+    let mut prefs = prefs_store.load();
+    prefs.custom_templates.retain(|t| t.id != tpl.id);
+    prefs.custom_templates.push(tpl);
+    prefs_store.save(&prefs)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn cmd_delete_custom_template(
+    id: String,
+    registry: State<'_, Registry>,
+    prefs_store: State<'_, PrefsStore>,
+) -> Result<(), AppError> {
+    if BUILTIN_IDS.contains(&id.as_str()) {
+        return Err(AppError::Parse(format!("不能删除内置模板：{}", id)));
+    }
+    registry.remove(&id);
+    let mut prefs = prefs_store.load();
+    prefs.custom_templates.retain(|t| t.id != id);
+    prefs_store.save(&prefs)?;
+    Ok(())
 }

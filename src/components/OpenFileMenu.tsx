@@ -1,16 +1,23 @@
-// 最近文件下拉：在 OpenFileButton 旁，展示最近 10 个打开过的文件
-// 点击任意一个直接调 openFile 加载
+// 顶部"📂 打开 + ▾"复合按钮：
+// - 左半"📂 打开"：tauri open dialog → loadFile
+// - 右半"▾"：下拉显示最近文件 → 点选直接打开
 
 import { useEffect, useState } from 'react';
-import { listRecentFiles, clearRecentFiles, openFile } from '../api/commands';
+import { open } from '@tauri-apps/plugin-dialog';
+import { openFile, listRecentFiles, clearRecentFiles } from '../api/commands';
 import { useSession } from '../state/session';
 
-export function RecentFilesMenu() {
+function formatPath(p: string): { name: string; dir: string } {
+  const idx = p.lastIndexOf('/');
+  if (idx < 0) return { name: p, dir: '' };
+  return { name: p.slice(idx + 1), dir: p.slice(0, idx) };
+}
+
+export function OpenFileMenu() {
   const { loadFile, setError, setLoading, metadata } = useSession();
-  const [open, setOpen] = useState(false);
+  const [dropOpen, setDropOpen] = useState(false);
   const [recent, setRecent] = useState<string[]>([]);
 
-  // 每次菜单打开 + metadata 变化时刷新（打开新文件后下次菜单展开看到最新)
   const refresh = async () => {
     try {
       const list = await listRecentFiles();
@@ -22,19 +29,27 @@ export function RecentFilesMenu() {
 
   useEffect(() => { refresh(); }, [metadata]);
 
-  const handleOpen = async (path: string) => {
-    setOpen(false);
+  const loadByPath = async (path: string) => {
+    setDropOpen(false);
     setError(null);
     try {
       setLoading(true);
       const md = await openFile(path);
-      loadFile(md);   // 重置 spec / result / 选中行
+      loadFile(md);
     } catch (e) {
-      const msg = typeof e === 'string' ? e : JSON.stringify(e);
-      setError(`打开失败：${msg}`);
+      setError(`打开失败：${typeof e === 'string' ? e : JSON.stringify(e)}`);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleOpenDialog = async () => {
+    setError(null);
+    const selected = await open({
+      multiple: false,
+      filters: [{ name: 'Log', extensions: ['log', 'jsonl', 'txt'] }],
+    });
+    if (typeof selected === 'string') await loadByPath(selected);
   };
 
   const handleClear = async () => {
@@ -43,32 +58,20 @@ export function RecentFilesMenu() {
     await refresh();
   };
 
-  const formatPath = (p: string): { name: string; dir: string } => {
-    const idx = p.lastIndexOf('/');
-    if (idx < 0) return { name: p, dir: '' };
-    return { name: p.slice(idx + 1), dir: p.slice(0, idx) };
-  };
-
   return (
     <div className="relative">
-      <button
-        onClick={() => { refresh(); setOpen((v) => !v); }}
-        className="px-2 py-1.5 text-sm rounded border border-slate-300 bg-white hover:bg-slate-50"
-        title="最近打开"
-      >
-        ▾
-      </button>
-      {open && (
+      <div className="ctl-segment">
+        <button onClick={handleOpenDialog}>📂 打开</button>
+        <button onClick={() => { refresh(); setDropOpen((v) => !v); }} style={{ padding: '0 6px' }}>▾</button>
+      </div>
+      {dropOpen && (
         <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="fixed inset-0 z-10" onClick={() => setDropOpen(false)} />
           <div className="absolute top-full left-0 mt-1 w-[28rem] bg-white border rounded shadow-lg z-20 text-sm">
             <div className="px-3 py-1.5 text-xs text-slate-500 border-b flex items-center justify-between">
               <span>最近打开</span>
               {recent.length > 0 && (
-                <button
-                  onClick={handleClear}
-                  className="text-slate-400 hover:text-red-600 text-xs"
-                >
+                <button onClick={handleClear} className="text-slate-400 hover:text-red-600 text-xs">
                   清除
                 </button>
               )}
@@ -82,16 +85,14 @@ export function RecentFilesMenu() {
               return (
                 <button
                   key={p}
-                  onClick={() => handleOpen(p)}
+                  onClick={() => loadByPath(p)}
                   className={[
                     'w-full text-left px-3 py-1.5 hover:bg-slate-100 flex flex-col',
                     isCurrent ? 'bg-blue-50' : '',
                   ].join(' ')}
                   title={p}
                 >
-                  <span className="text-slate-800 truncate">
-                    {isCurrent ? '✓ ' : ''}{name}
-                  </span>
+                  <span className="text-slate-800 truncate">{isCurrent ? '✓ ' : ''}{name}</span>
                   <span className="text-slate-400 text-xs truncate">{dir}</span>
                 </button>
               );

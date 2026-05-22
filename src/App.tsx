@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { OpenFileButton } from './components/OpenFileButton';
-import { RecentFilesMenu } from './components/RecentFilesMenu';
+import { OpenFileMenu } from './components/OpenFileMenu';
 import { FilterBar } from './components/FilterBar';
 import { StatsPanel } from './components/StatsPanel';
 import { LogList } from './components/LogList';
@@ -25,10 +24,7 @@ export default function App() {
     <div className="h-screen flex flex-col bg-slate-50 text-slate-900">
       <header className="flex items-center gap-3 px-4 py-2 border-b bg-white">
         <h1 className="text-base font-semibold">Log Viewer</h1>
-        <div className="flex items-center gap-px">
-          <OpenFileButton />
-          <RecentFilesMenu />
-        </div>
+        <OpenFileMenu />
         {metadata && <TemplateMenu onOpenManager={() => setShowManager(true)} />}
         {metadata && <FollowToggle />}
         <div className="ml-auto text-xs text-slate-500">

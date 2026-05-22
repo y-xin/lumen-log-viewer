@@ -62,6 +62,33 @@ pub fn export_jsonl<W: Write>(
     Ok(())
 }
 
+/// JSON Array：整文件是一个 JSON 数组（每个元素 pretty 打印）。
+/// 空 matched 输出 "[]\n" 以避免 "[\n\n]" 这种丑形态
+pub fn export_json_array<W: Write>(
+    entries: &[LogEntry],
+    matched: &[u32],
+    w: &mut BufWriter<W>,
+) -> std::io::Result<()> {
+    if matched.is_empty() {
+        w.write_all(b"[]\n")?;
+        return Ok(());
+    }
+    w.write_all(b"[\n")?;
+    let mut first = true;
+    for &idx in matched {
+        let Some(e) = entries.get(idx as usize) else { continue; };
+        if !first {
+            w.write_all(b",\n")?;
+        }
+        first = false;
+        let pretty = serde_json::to_string_pretty(e)
+            .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidData, err))?;
+        w.write_all(pretty.as_bytes())?;
+    }
+    w.write_all(b"\n]\n")?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -152,5 +179,24 @@ mod tests {
             let back: LogEntry = serde_json::from_str(line).unwrap();
             assert!(back.line_no == 1 || back.line_no == 2);
         }
+    }
+
+    #[test]
+    fn json_array_empty_matched_is_brackets_only() {
+        let s = export_to_string(|w| export_json_array(&[], &[], w));
+        assert_eq!(s, "[]\n");
+    }
+
+    #[test]
+    fn json_array_parses_back_to_vec() {
+        let entries = vec![
+            e(1, Some("a"), "hi", &[("k", "v")]),
+            e(2, Some("b"), "ho", &[]),
+        ];
+        let s = export_to_string(|w| export_json_array(&entries, &[0, 1], w));
+        let back: Vec<LogEntry> = serde_json::from_str(&s).unwrap();
+        assert_eq!(back.len(), 2);
+        assert_eq!(back[0].line_no, 1);
+        assert_eq!(back[1].line_no, 2);
     }
 }

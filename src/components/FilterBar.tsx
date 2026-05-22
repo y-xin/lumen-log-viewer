@@ -184,7 +184,13 @@ export function FilterBar() {
             onChange={(e) => setScopePattern(e.target.value)}
             placeholder="模式（如 auth.* 或 user-service）"
             className="input-ctl w-full pr-6"
+            list={scopeValueOptions.length > 0 ? 'lv-scope-value-options' : undefined}
           />
+          {scopeValueOptions.length > 0 && (
+            <datalist id="lv-scope-value-options">
+              {scopeValueOptions.map((v) => <option key={v} value={v} />)}
+            </datalist>
+          )}
           {scopePattern && (
             <button
               onClick={() => setScopePattern('')}

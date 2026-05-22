@@ -6,6 +6,7 @@ import { FixedSizeList as List, ListChildComponentProps, ListOnScrollProps } fro
 import { getPage } from '../api/commands';
 import { useSession } from '../state/session';
 import type { LogEntry, LogLevel } from '../types/log';
+import { HighlightedText } from './HighlightedText';
 
 const PAGE_SIZE = 200;
 const ROW_HEIGHT = 28;
@@ -218,7 +219,7 @@ export function LogList() {
           {e.scope ?? '-'}
         </span>
         <span className="flex-1 flex items-center truncate px-2" title={combined}>
-          {combined}
+          <HighlightedText text={combined} needle={spec.text_search ?? ''} />
         </span>
       </div>
     );

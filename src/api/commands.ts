@@ -13,6 +13,9 @@ import type {
   ExportFormat,
   ExportResult,
   SavedFilter,
+  NeighborDir,
+  NeighborResponse,
+  PositionResponse,
 } from '../types/log';
 
 /** 序列化 QuerySpec 时 levels / scope_in 由数组转为后端可接受形态 */
@@ -110,4 +113,25 @@ export async function renameSavedFilter(
   newName: string,
 ): Promise<SavedFilter[]> {
   return invoke<SavedFilter[]>('cmd_rename_saved_filter', { filePath, id, newName });
+}
+
+// ─── Cross-page Detail Nav ───
+
+export async function getNeighbor(
+  spec: QuerySpec,
+  lineNo: number,
+  dir: NeighborDir,
+): Promise<NeighborResponse | null> {
+  return invoke<NeighborResponse | null>('cmd_get_neighbor', {
+    spec: serializeSpec(spec), lineNo, dir,
+  });
+}
+
+export async function getPosition(
+  spec: QuerySpec,
+  lineNo: number,
+): Promise<PositionResponse | null> {
+  return invoke<PositionResponse | null>('cmd_get_position', {
+    spec: serializeSpec(spec), lineNo,
+  });
 }

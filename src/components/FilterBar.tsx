@@ -33,7 +33,7 @@ function localInputToIso(local: string): string {
 }
 
 export function FilterBar() {
-  const { spec, patchSpec } = useSession();
+  const { spec, patchSpec, metadata } = useSession();
   const keywordRef = useRef<HTMLInputElement>(null);
 
   // 本地输入态（debounce 后再写 store）
@@ -126,6 +126,13 @@ export function FilterBar() {
     const common = ['scope', 'request_id', 'trace_id', 'span_id', 'user_id', 'session_id', 'service', 'logger', 'thread'];
     return common;
   }, []);
+
+  // scope 值补全候选：仅 exact 模式 + 当前 field 是 scope 时，提示当前文件出现过的 scope 名
+  // glob/regex 模式下用户在输 pattern 而非具体值，提示会反而干扰，所以不给
+  const scopeValueOptions = useMemo(() => {
+    if (scopeMode !== 'exact' || scopeField !== 'scope' || !metadata) return [];
+    return Object.keys(metadata.scope_counts ?? {}).sort();
+  }, [scopeMode, scopeField, metadata]);
 
   const toggleLevel = (lv: LogLevel) => {
     const current = new Set(spec.levels ?? LEVELS);

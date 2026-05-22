@@ -3,8 +3,10 @@
 // 损坏时备份为 prefs.json.bak.{ts} 并重置为默认
 
 use crate::error::AppError;
+use crate::query::ScopeFilter;
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -29,6 +31,19 @@ pub struct CustomFieldMap {
     pub message: Option<String>,
 }
 
+/// 命名保存的筛选器（按文件路径独立）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SavedFilter {
+    /// 前端 crypto.randomUUID() 生成
+    pub id: String,
+    pub name: String,
+    /// ISO 8601 UTC，用于排序
+    pub created_at: String,
+    pub levels: Option<Vec<String>>,
+    pub scope_filter: Option<ScopeFilter>,
+    pub text_search: Option<String>,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Prefs {
     pub version: u32,
@@ -37,6 +52,9 @@ pub struct Prefs {
     /// 不存在/不可访问的路径在 list 时由前端忽略，文件内保留。
     #[serde(default)]
     pub recent_files: Vec<String>,
+    /// 命名筛选器：key = 文件绝对路径，value = 该文件下保存的筛选器列表
+    #[serde(default)]
+    pub saved_filters: HashMap<String, Vec<SavedFilter>>,
 }
 
 const MAX_RECENT_FILES: usize = 10;
@@ -107,7 +125,12 @@ impl PrefsStore {
 
 impl Prefs {
     fn default_v1() -> Self {
-        Prefs { version: 1, custom_templates: vec![], recent_files: vec![] }
+        Prefs {
+            version: 1,
+            custom_templates: vec![],
+            recent_files: vec![],
+            saved_filters: HashMap::new(),
+        }
     }
 }
 
@@ -180,6 +203,7 @@ mod tests {
             version: 1,
             custom_templates: vec![sample_template()],
             recent_files: vec![],
+            saved_filters: HashMap::new(),
         };
         store.save(&prefs).unwrap();
         let loaded = store.load();

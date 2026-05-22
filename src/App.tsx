@@ -27,8 +27,8 @@ export default function App() {
         <OpenFileMenu />
         {metadata && <TemplateMenu onOpenManager={() => setShowManager(true)} />}
         {metadata && <FollowToggle />}
-        <div className="ml-auto text-xs text-slate-500">
-          {metadata ? `${metadata.path} · ${metadata.total} 行 · 模板 ${metadata.template_id}` : '未打开文件'}
+        <div className="ml-auto text-xs text-slate-500 truncate max-w-[50%]" title={metadata?.path}>
+          {metadata ? metadata.path : '未打开文件'}
         </div>
       </header>
       {error && (

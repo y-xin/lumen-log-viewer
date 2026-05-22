@@ -39,7 +39,7 @@ export function TemplateMenu({ onOpenManager }: Props) {
     <div className="relative">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="px-3 py-1.5 text-sm rounded border border-slate-300 bg-white hover:bg-slate-50"
+        className="ctl"
       >
         模板：{current?.name ?? currentTemplateId ?? '—'} ▾
       </button>

@@ -46,6 +46,22 @@ fn csv_escape(s: &str) -> String {
     format!("\"{}\"", escaped)
 }
 
+/// JSON Lines：每行一个 LogEntry JSON，行尾 \n
+pub fn export_jsonl<W: Write>(
+    entries: &[LogEntry],
+    matched: &[u32],
+    w: &mut BufWriter<W>,
+) -> std::io::Result<()> {
+    for &idx in matched {
+        let Some(e) = entries.get(idx as usize) else { continue; };
+        let line = serde_json::to_string(e)
+            .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidData, err))?;
+        w.write_all(line.as_bytes())?;
+        w.write_all(b"\n")?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -115,5 +131,26 @@ mod tests {
         let s = export_to_string(|w| export_csv(&entries, &[0], w));
         let lines: Vec<&str> = s.lines().collect();
         assert!(lines[1].contains(",info,,中文消息,"));
+    }
+
+    #[test]
+    fn jsonl_empty_matched_is_empty_string() {
+        let s = export_to_string(|w| export_jsonl(&[], &[], w));
+        assert_eq!(s, "");
+    }
+
+    #[test]
+    fn jsonl_each_line_roundtrips() {
+        let entries = vec![
+            e(1, Some("a"), "hi", &[("k", "v")]),
+            e(2, Some("b"), "ho", &[]),
+        ];
+        let s = export_to_string(|w| export_jsonl(&entries, &[0, 1], w));
+        let lines: Vec<&str> = s.lines().collect();
+        assert_eq!(lines.len(), 2);
+        for line in &lines {
+            let back: LogEntry = serde_json::from_str(line).unwrap();
+            assert!(back.line_no == 1 || back.line_no == 2);
+        }
     }
 }

@@ -6,13 +6,16 @@ import { LogList } from './components/LogList';
 import { TemplateMenu } from './components/TemplateMenu';
 import { TemplateManagerDialog } from './components/TemplateManagerDialog';
 import { DetailDrawer } from './components/DetailDrawer';
+import { FollowToggle } from './components/FollowToggle';
 import { useSession } from './state/session';
 import { useAutoQuery } from './hooks/useAutoQuery';
+import { useTailFollow } from './hooks/useTailFollow';
 
 export default function App() {
   const { metadata, loading, error } = useSession();
   const [showManager, setShowManager] = useState(false);
   useAutoQuery();
+  useTailFollow();
 
   return (
     <div className="h-screen flex flex-col bg-slate-50 text-slate-900">
@@ -20,6 +23,7 @@ export default function App() {
         <h1 className="text-base font-semibold">Log Viewer</h1>
         <OpenFileButton />
         {metadata && <TemplateMenu onOpenManager={() => setShowManager(true)} />}
+        {metadata && <FollowToggle />}
         <div className="ml-auto text-xs text-slate-500">
           {metadata ? `${metadata.path} · ${metadata.total} 行 · 模板 ${metadata.template_id}` : '未打开文件'}
         </div>

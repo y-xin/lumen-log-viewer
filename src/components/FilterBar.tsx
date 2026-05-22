@@ -33,7 +33,7 @@ function localInputToIso(local: string): string {
 }
 
 export function FilterBar() {
-  const { spec, patchSpec, metadata } = useSession();
+  const { spec, patchSpec } = useSession();
   const keywordRef = useRef<HTMLInputElement>(null);
 
   // 本地输入态（debounce 后再写 store）
@@ -121,10 +121,11 @@ export function FilterBar() {
     return () => window.removeEventListener('lv:focus-keyword', handler);
   }, []);
 
+  // 字段补全候选：scope 在前，加常见结构化字段名（用户可自由输入任意值，datalist 仅补全提示）
   const fieldOptions = useMemo(() => {
-    // "scope" + 当前文件出现过的 fields 名（MVP 简化：只列 "scope"）
-    return ['scope'];
-  }, [metadata]);
+    const common = ['scope', 'request_id', 'trace_id', 'span_id', 'user_id', 'session_id', 'service', 'logger', 'thread'];
+    return common;
+  }, []);
 
   const toggleLevel = (lv: LogLevel) => {
     const current = new Set(spec.levels ?? LEVELS);
@@ -158,13 +159,18 @@ export function FilterBar() {
 
       <div className="flex items-center gap-1.5 text-sm">
         <span className="text-slate-500">Scope：</span>
-        <select
+        <input
           value={scopeField}
-          onChange={(e) => setScopeField(e.target.value)}
-          className="select-ctl"
-        >
-          {fieldOptions.map((f) => <option key={f} value={f}>{f}</option>)}
-        </select>
+          onChange={(e) => setScopeField(e.target.value || 'scope')}
+          list="lv-scope-field-options"
+          className="input-ctl"
+          style={{ width: 110 }}
+          placeholder="字段名"
+          title="可输入任意字段名（如 request_id），匹配 entry.fields[字段名]"
+        />
+        <datalist id="lv-scope-field-options">
+          {fieldOptions.map((f) => <option key={f} value={f} />)}
+        </datalist>
         <div className="relative flex-1 max-w-xs">
           <input
             value={scopePattern}

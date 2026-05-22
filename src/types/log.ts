@@ -92,6 +92,17 @@ export interface CustomTemplate {
   tail_parser: TailParserKind;
 }
 
+// ─── Saved Filters ───
+
+export interface SavedFilter {
+  id: string;
+  name: string;
+  created_at: string;             // ISO 8601 UTC
+  levels: LogLevel[] | null;
+  scope_filter: ScopeFilter | null;
+  text_search: string | null;
+}
+
 export interface TestSample {
   line_no: number;
   line_count: number;

@@ -8,6 +8,7 @@ use crate::parser;
 use crate::parser::registry::Registry;
 use crate::prefs::{CustomTemplate, PrefsStore, SavedFilter};
 use crate::query::{self, QuerySpec};
+use crate::query::neighbor::{NeighborDir, NeighborResponse, PositionResponse};
 use crate::session::SessionState;
 use crate::stats;
 use serde::{Deserialize, Serialize};
@@ -404,4 +405,25 @@ pub fn cmd_rename_saved_filter(
     new_name: String,
 ) -> Result<Vec<SavedFilter>, AppError> {
     prefs_store.rename_filter(&file_path, &id, &new_name)
+}
+
+// ─── Cross-page Detail Nav ───
+
+#[tauri::command]
+pub fn cmd_get_neighbor(
+    spec: QuerySpec,
+    line_no: u32,
+    dir: NeighborDir,
+    state: State<'_, SessionState>,
+) -> Result<Option<NeighborResponse>, AppError> {
+    query::neighbor::neighbor(&state, &spec, line_no, dir)
+}
+
+#[tauri::command]
+pub fn cmd_get_position(
+    spec: QuerySpec,
+    line_no: u32,
+    state: State<'_, SessionState>,
+) -> Result<Option<PositionResponse>, AppError> {
+    query::neighbor::position(&state, &spec, line_no)
 }

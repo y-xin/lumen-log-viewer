@@ -50,6 +50,8 @@ pub fn run() {
             commands::cmd_save_filter,
             commands::cmd_delete_saved_filter,
             commands::cmd_rename_saved_filter,
+            commands::cmd_get_neighbor,
+            commands::cmd_get_position,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

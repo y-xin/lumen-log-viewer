@@ -444,3 +444,18 @@ pub fn cmd_save_column_widths(
 ) -> Result<(), AppError> {
     prefs_store.save_column_widths(widths)
 }
+
+#[tauri::command]
+pub fn cmd_get_column_visibility(
+    prefs_store: State<'_, PrefsStore>,
+) -> Option<std::collections::HashMap<String, bool>> {
+    prefs_store.get_column_visibility()
+}
+
+#[tauri::command]
+pub fn cmd_save_column_visibility(
+    prefs_store: State<'_, PrefsStore>,
+    visibility: std::collections::HashMap<String, bool>,
+) -> Result<(), AppError> {
+    prefs_store.save_column_visibility(visibility)
+}

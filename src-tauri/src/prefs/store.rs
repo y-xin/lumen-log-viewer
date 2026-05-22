@@ -59,6 +59,10 @@ pub struct Prefs {
     /// 全局生效，不按文件区分；用户拖一次就记住。
     #[serde(default)]
     pub column_widths: Option<HashMap<String, u32>>,
+    /// UI 偏好：列显隐（key = "line" | "time" | "level" | "scope"，value = true 显示）
+    /// Message 列不在此 map 里管理（永远显示，作为核心信息）。
+    #[serde(default)]
+    pub column_visibility: Option<HashMap<String, bool>>,
 }
 
 const MAX_RECENT_FILES: usize = 10;
@@ -138,6 +142,18 @@ impl PrefsStore {
         self.save(&prefs)
     }
 
+    /// 读列显隐偏好；未保存返回 None（前端用默认 = 全部显示）
+    pub fn get_column_visibility(&self) -> Option<HashMap<String, bool>> {
+        self.load().column_visibility
+    }
+
+    /// 写列显隐偏好（整张表覆盖）
+    pub fn save_column_visibility(&self, vis: HashMap<String, bool>) -> Result<(), AppError> {
+        let mut prefs = self.load();
+        prefs.column_visibility = Some(vis);
+        self.save(&prefs)
+    }
+
     /// 列出某文件下的所有保存筛选，按 created_at 倒序（最新在前）
     pub fn list_filters(&self, file_path: &str) -> Vec<SavedFilter> {
         let prefs = self.load();
@@ -204,6 +220,7 @@ impl Prefs {
             recent_files: vec![],
             saved_filters: HashMap::new(),
             column_widths: None,
+            column_visibility: None,
         }
     }
 }
@@ -279,6 +296,7 @@ mod tests {
             recent_files: vec![],
             saved_filters: HashMap::new(),
             column_widths: None,
+            column_visibility: None,
         };
         store.save(&prefs).unwrap();
         let loaded = store.load();

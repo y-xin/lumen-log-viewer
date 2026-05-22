@@ -145,3 +145,11 @@ export async function getColumnWidths(): Promise<Record<string, number> | null> 
 export async function saveColumnWidths(widths: Record<string, number>): Promise<void> {
   return invoke<void>('cmd_save_column_widths', { widths });
 }
+
+export async function getColumnVisibility(): Promise<Record<string, boolean> | null> {
+  return invoke<Record<string, boolean> | null>('cmd_get_column_visibility');
+}
+
+export async function saveColumnVisibility(visibility: Record<string, boolean>): Promise<void> {
+  return invoke<void>('cmd_save_column_visibility', { visibility });
+}

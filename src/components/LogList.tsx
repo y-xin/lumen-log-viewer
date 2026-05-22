@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { VariableSizeList as List, ListChildComponentProps, ListOnItemsRenderedProps } from 'react-window';
-import { getPage, getColumnWidths, saveColumnWidths } from '../api/commands';
+import { getPage, getColumnWidths, saveColumnWidths, getColumnVisibility, saveColumnVisibility } from '../api/commands';
 import { useSession } from '../state/session';
 import type { LogEntry, LogLevel } from '../types/log';
 import { HighlightedText } from './HighlightedText';
@@ -36,11 +36,17 @@ const FOOTER_LEVEL_COLOR: Record<LogLevel, string> = {
 
 // 可拖动列：默认宽度 + 最小宽度
 type ColKey = 'line' | 'time' | 'level' | 'scope';
+const COL_LABELS: Record<ColKey, string> = {
+  line: '行号', time: '时间', level: '级别', scope: 'Scope',
+};
 const DEFAULT_WIDTHS: Record<ColKey, number> = {
   line: 70,
   time: 180,
   level: 56,
   scope: 160,
+};
+const DEFAULT_VISIBILITY: Record<ColKey, boolean> = {
+  line: true, time: true, level: true, scope: true,
 };
 const MIN_WIDTH = 32;
 
@@ -135,6 +141,31 @@ export function LogList() {
       if (persistTimer.current != null) window.clearTimeout(persistTimer.current);
     };
   }, [widths]);
+
+  // 列显隐 + 持久化（即时写，频率低无需 debounce）
+  const [visibility, setVisibility] = useState<Record<ColKey, boolean>>(DEFAULT_VISIBILITY);
+  useEffect(() => {
+    let cancelled = false;
+    getColumnVisibility()
+      .then((saved) => {
+        if (cancelled || !saved) return;
+        const next: Record<ColKey, boolean> = { ...DEFAULT_VISIBILITY };
+        (Object.keys(DEFAULT_VISIBILITY) as ColKey[]).forEach((k) => {
+          if (typeof saved[k] === 'boolean') next[k] = saved[k];
+        });
+        setVisibility(next);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+  const toggleColumn = (col: ColKey) => {
+    setVisibility((prev) => {
+      const next = { ...prev, [col]: !prev[col] };
+      saveColumnVisibility(next).catch(() => {});
+      return next;
+    });
+  };
+  const [colMenuOpen, setColMenuOpen] = useState(false);
 
   const startResize = (col: ColKey, e: React.MouseEvent) => {
     e.preventDefault();
@@ -266,8 +297,12 @@ export function LogList() {
     const fieldsTxt = formatFields(e.fields);
     const messageTxt = e.message || e.raw;
     const combined = fieldsTxt ? `${messageTxt}    ${fieldsTxt}` : messageTxt;
-    // 展开块左侧缩进对齐到 message 列起点
-    const expandedIndent = widths.line + widths.time + widths.level + widths.scope + 8;
+    // 展开块左侧缩进对齐到 message 列起点（仅累加可见列宽）
+    const expandedIndent =
+      (visibility.line ? widths.line : 0) +
+      (visibility.time ? widths.time : 0) +
+      (visibility.level ? widths.level : 0) +
+      (visibility.scope ? widths.scope : 0) + 8;
     // 展开块裁掉 raw 首行 + 可能截断到上限
     let restRaw = restOfRaw(e.raw);
     const restLines = restRaw ? restRaw.split('\n') : [];
@@ -289,18 +324,26 @@ export function LogList() {
         ].join(' ')}
       >
         <div className="px-2 flex items-stretch gap-0" style={{ height: ROW_HEIGHT }}>
-          <span style={{ width: widths.line }} className="flex items-center text-slate-400 text-right justify-end pr-2">
-            {lineLabel(e)}
-          </span>
-          <span style={{ width: widths.time }} className="flex items-center text-slate-500 truncate px-2">
-            {e.timestamp ?? '-'}
-          </span>
-          <span style={{ width: widths.level }} className={['flex items-center uppercase px-2', LEVEL_COLOR[e.level]].join(' ')}>
-            {e.level}
-          </span>
-          <span style={{ width: widths.scope }} className="flex items-center text-slate-600 truncate px-2">
-            {e.scope ?? '-'}
-          </span>
+          {visibility.line && (
+            <span style={{ width: widths.line }} className="flex items-center text-slate-400 text-right justify-end pr-2">
+              {lineLabel(e)}
+            </span>
+          )}
+          {visibility.time && (
+            <span style={{ width: widths.time }} className="flex items-center text-slate-500 truncate px-2">
+              {e.timestamp ?? '-'}
+            </span>
+          )}
+          {visibility.level && (
+            <span style={{ width: widths.level }} className={['flex items-center uppercase px-2', LEVEL_COLOR[e.level]].join(' ')}>
+              {e.level}
+            </span>
+          )}
+          {visibility.scope && (
+            <span style={{ width: widths.scope }} className="flex items-center text-slate-600 truncate px-2">
+              {e.scope ?? '-'}
+            </span>
+          )}
           <span className="flex-1 flex items-center truncate px-2" title={combined}>
             <HighlightedText text={combined} needle={spec.text_search ?? ''} />
           </span>
@@ -332,18 +375,61 @@ export function LogList() {
   // 显示跳到底部按钮：不在底部时一直显示；如果还有未读新条目数显示数字
   const showJumpToBottom = !atBottom && result.total_matched > 0;
 
-  // 表头：与 Row 列宽对齐，列之间放可拖动的 resizer
+  // 表头：与 Row 列宽对齐，列之间放可拖动的 resizer；最右侧 ⚙ 控制列显隐
   const Header = () => (
-    <div className="flex items-stretch text-xs font-medium text-slate-500 bg-slate-50 border-b border-slate-200 select-none">
-      <div style={{ width: widths.line }} className="flex items-center justify-end pr-2 py-1">行号</div>
-      <Resizer onMouseDown={(e) => startResize('line', e)} />
-      <div style={{ width: widths.time }} className="flex items-center px-2 py-1">时间</div>
-      <Resizer onMouseDown={(e) => startResize('time', e)} />
-      <div style={{ width: widths.level }} className="flex items-center px-2 py-1">级别</div>
-      <Resizer onMouseDown={(e) => startResize('level', e)} />
-      <div style={{ width: widths.scope }} className="flex items-center px-2 py-1">Scope</div>
-      <Resizer onMouseDown={(e) => startResize('scope', e)} />
+    <div className="flex items-stretch text-xs font-medium text-slate-500 bg-slate-50 border-b border-slate-200 select-none relative">
+      {visibility.line && (
+        <>
+          <div style={{ width: widths.line }} className="flex items-center justify-end pr-2 py-1">行号</div>
+          <Resizer onMouseDown={(e) => startResize('line', e)} />
+        </>
+      )}
+      {visibility.time && (
+        <>
+          <div style={{ width: widths.time }} className="flex items-center px-2 py-1">时间</div>
+          <Resizer onMouseDown={(e) => startResize('time', e)} />
+        </>
+      )}
+      {visibility.level && (
+        <>
+          <div style={{ width: widths.level }} className="flex items-center px-2 py-1">级别</div>
+          <Resizer onMouseDown={(e) => startResize('level', e)} />
+        </>
+      )}
+      {visibility.scope && (
+        <>
+          <div style={{ width: widths.scope }} className="flex items-center px-2 py-1">Scope</div>
+          <Resizer onMouseDown={(e) => startResize('scope', e)} />
+        </>
+      )}
       <div className="flex-1 flex items-center px-2 py-1">Message + Fields</div>
+      <button
+        onClick={() => setColMenuOpen((v) => !v)}
+        className="px-2 text-slate-400 hover:text-slate-700"
+        title="显示/隐藏列"
+      >⚙</button>
+      {colMenuOpen && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setColMenuOpen(false)} />
+          <div className="absolute top-full right-0 mt-1 w-44 bg-white border rounded shadow-lg z-20 text-xs">
+            <div className="px-3 py-1.5 text-slate-500 border-b">显示列</div>
+            {(Object.keys(DEFAULT_VISIBILITY) as ColKey[]).map((k) => (
+              <label
+                key={k}
+                className="flex items-center gap-2 px-3 py-1.5 hover:bg-slate-100 cursor-pointer"
+              >
+                <input
+                  type="checkbox"
+                  checked={visibility[k]}
+                  onChange={() => toggleColumn(k)}
+                />
+                <span>{COL_LABELS[k]}</span>
+              </label>
+            ))}
+            <div className="px-3 py-1 text-slate-400 italic border-t">Message 列固定显示</div>
+          </div>
+        </>
+      )}
     </div>
   );
 

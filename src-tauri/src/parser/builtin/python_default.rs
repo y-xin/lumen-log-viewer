@@ -23,6 +23,7 @@ pub fn template() -> RegexTemplate {
             message: Some("message".into()),
         },
         tail: None,
+        unwrap_nested: false,
     }
 }
 

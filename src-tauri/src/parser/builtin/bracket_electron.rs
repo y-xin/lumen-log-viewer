@@ -15,7 +15,8 @@ pub fn template() -> RegexTemplate {
         id: "bracket-electron".into(),
         name: "Bracket (Electron)".into(),
         pattern: Regex::new(
-            r"^\[(?P<ts>[^\]]+)\]\s+\[(?P<level>[^\]]+)\]\s+[\[\(](?P<scope>[^\]\)]+)[\]\)]\s+(?P<message>.*)$"
+            // 末尾 \s*(?P<message>.*) — message 可空，便于嵌套日志解后 head 部分仍能被识别
+            r"^\[(?P<ts>[^\]]+)\]\s+\[(?P<level>[^\]]+)\]\s+[\[\(](?P<scope>[^\]\)]+)[\]\)]\s*(?P<message>.*)$"
         ).unwrap(),
         start_pattern: Regex::new(r"^\[\d{4}-\d{2}-\d{2}[ T]").unwrap(),
         time_formats: vec![
@@ -30,6 +31,7 @@ pub fn template() -> RegexTemplate {
             message: Some("message".into()),
         },
         tail: Some(TailParserKind::JsonLike),
+        unwrap_nested: true,
     }
 }
 

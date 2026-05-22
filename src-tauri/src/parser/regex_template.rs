@@ -25,6 +25,11 @@ pub struct RegexTemplate {
     pub time_formats: Vec<String>,
     pub field_map: FieldMap,
     pub tail: Option<TailParserKind>,
+    /// 嵌套剥离：当 message 本身又能被同一模板解析时（如 electron-log
+    /// 包装的子进程 stderr 也是 bracket 风格），自动剥离一层。
+    /// 内层的 ts/level/scope 进 fields 的 inner_* 键，message 替换为内层 message。
+    /// 仅尝试 1 层（避免无限递归）。
+    pub unwrap_nested: bool,
 }
 
 impl ParserTemplate for RegexTemplate {
@@ -66,12 +71,59 @@ impl ParserTemplate for RegexTemplate {
             raw_message
         };
 
-        let (message, fields) = match self.tail {
+        let (mut message, mut fields) = match self.tail {
             Some(kind) => parse_tail(&combined_message, kind),
             None       => (combined_message.trim().to_string(), HashMap::new()),
         };
 
+        // 嵌套剥离：message 整体匹配同模板时再解一层
+        if self.unwrap_nested {
+            if let Some(unwrapped) = self.try_unwrap_nested(&message, &mut fields) {
+                message = unwrapped;
+            }
+        }
+
         Some(PartialEntry { timestamp, level, scope, message, fields })
+    }
+}
+
+impl RegexTemplate {
+    /// 嵌套剥离辅助：尝试用本模板再解一次 message。
+    /// 成功 → 内层 ts/level/scope 写入 fields 的 inner_* 键；返回内层 message（已跑过 tail parser）
+    /// 失败 → 返回 None，调用方保持原 message
+    fn try_unwrap_nested(&self, msg: &str, fields: &mut HashMap<String, String>) -> Option<String> {
+        if !self.start_pattern.is_match(msg) { return None; }
+        let caps = self.pattern.captures(msg)?;
+
+        if let Some(name) = &self.field_map.timestamp {
+            if let Some(m) = caps.name(name) {
+                fields.entry("inner_timestamp".into()).or_insert_with(|| m.as_str().to_string());
+            }
+        }
+        if let Some(name) = &self.field_map.level {
+            if let Some(m) = caps.name(name) {
+                fields.entry("inner_level".into()).or_insert_with(|| m.as_str().to_string());
+            }
+        }
+        if let Some(name) = &self.field_map.scope {
+            if let Some(m) = caps.name(name) {
+                fields.entry("inner_scope".into()).or_insert_with(|| m.as_str().to_string());
+            }
+        }
+
+        let inner_raw = self.field_map.message.as_ref()
+            .and_then(|name| caps.name(name).map(|m| m.as_str().to_string()))
+            .unwrap_or_default();
+
+        // 内层 message 可能再带 tail JSON
+        let (inner_msg, inner_fields) = match self.tail {
+            Some(kind) => parse_tail(&inner_raw, kind),
+            None       => (inner_raw.trim().to_string(), HashMap::new()),
+        };
+        for (k, v) in inner_fields {
+            fields.entry(k).or_insert(v); // 外层优先：fields 已有的 key 不覆盖
+        }
+        Some(inner_msg)
     }
 }
 
@@ -107,6 +159,7 @@ mod tests {
                 message: Some("message".into()),
             },
             tail: None,
+            unwrap_nested: false,
         }
     }
 
@@ -166,10 +219,65 @@ mod tests {
                 message: Some("message".into()),
             },
             tail: Some(TailParserKind::JsonLike),
+            unwrap_nested: false,
         };
         let r = t.parse_record(&lines(r#"[2026-05-22 09:00:00.123] [info] (network) 端口已注册 { source: 'main', id: 'main' }"#)).unwrap();
         assert_eq!(r.scope.as_deref(), Some("network"));
         assert_eq!(r.message, "端口已注册");
         assert_eq!(r.fields.get("source").map(String::as_str), Some("main"));
+    }
+
+    #[test]
+    fn unwrap_nested_strips_outer_layer_when_message_is_another_log() {
+        // 模拟 electron-log 包装 gost 子进程 stderr：外层 + 内层都是 bracket 格式
+        let t = RegexTemplate {
+            id: "tnest".into(),
+            name: "TNest".into(),
+            pattern: Regex::new(r"^\[(?P<ts>[^\]]+)\]\s+\[(?P<level>[^\]]+)\]\s+\[(?P<scope>[^\]]+)\]\s*(?P<message>.*)$").unwrap(),
+            start_pattern: Regex::new(r"^\[\d{4}-").unwrap(),
+            time_formats: vec!["%Y-%m-%d %H:%M:%S%.3f".into()],
+            field_map: FieldMap {
+                timestamp: Some("ts".into()),
+                level: Some("level".into()),
+                scope: Some("scope".into()),
+                message: Some("message".into()),
+            },
+            tail: Some(TailParserKind::JsonLike),
+            unwrap_nested: true,
+        };
+        let raw = r#"[2026-05-22 10:52:09.160] [warn] [gost] [2026-05-22 10:52:09.160] [warn] [gost] {"caller":"x.go:1","msg":"hi"}"#;
+        let r = t.parse_record(&[raw.to_string()]).unwrap();
+        assert_eq!(r.scope.as_deref(), Some("gost"));
+        // message 应只剩内层去掉 {json} 后的部分（这里是空，因为前缀去完就只有 json）
+        assert!(r.message.is_empty() || r.message.trim().is_empty());
+        // 内层 ts/level/scope 进 inner_*
+        assert_eq!(r.fields.get("inner_scope").map(String::as_str), Some("gost"));
+        assert_eq!(r.fields.get("inner_level").map(String::as_str), Some("warn"));
+        // tail JSON 也提取
+        assert_eq!(r.fields.get("caller").map(String::as_str), Some("x.go:1"));
+        assert_eq!(r.fields.get("msg").map(String::as_str), Some("hi"));
+    }
+
+    #[test]
+    fn unwrap_nested_no_op_when_message_doesnt_match() {
+        let t = RegexTemplate {
+            id: "tnest".into(),
+            name: "TNest".into(),
+            pattern: Regex::new(r"^\[(?P<ts>[^\]]+)\] \[(?P<level>[^\]]+)\] (?P<message>.*)$").unwrap(),
+            start_pattern: Regex::new(r"^\[\d{4}").unwrap(),
+            time_formats: vec!["%Y-%m-%d %H:%M:%S%.3f".into()],
+            field_map: FieldMap {
+                timestamp: Some("ts".into()),
+                level: Some("level".into()),
+                scope: None,
+                message: Some("message".into()),
+            },
+            tail: None,
+            unwrap_nested: true,
+        };
+        let raw = "[2026-05-22 09:00:00.123] [info] just plain text";
+        let r = t.parse_record(&[raw.to_string()]).unwrap();
+        assert_eq!(r.message, "just plain text");
+        assert!(r.fields.is_empty());
     }
 }

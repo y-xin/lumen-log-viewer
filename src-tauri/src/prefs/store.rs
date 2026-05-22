@@ -107,6 +107,7 @@ pub fn compile_custom_template(c: &CustomTemplate) -> Result<RegexTemplate, AppE
             message: c.field_map.message.clone(),
         },
         tail,
+        unwrap_nested: false,   // 自定义模板默认不开启嵌套剥离（避免意外行为）
     })
 }
 

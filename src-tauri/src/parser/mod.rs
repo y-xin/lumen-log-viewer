@@ -16,11 +16,11 @@ pub fn parse_lines(lines: &[String]) -> Vec<LogEntry> {
         .map(|(i, line)| {
             let line_no = (i + 1) as u32;
             if line.trim().is_empty() {
-                return fallback(line_no, line);
+                return fallback(line_no, 1, line);
             }
             match tpl.parse_line(line) {
-                Some(p) => finalize(line_no, line, p),
-                None => fallback(line_no, line),
+                Some(p) => finalize(line_no, 1, line, p),
+                None => fallback(line_no, 1, line),
             }
         })
         .collect()

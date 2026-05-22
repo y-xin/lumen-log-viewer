@@ -18,6 +18,7 @@ pub enum LogLevel {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LogEntry {
     pub line_no: u32,
+    pub line_count: u32,
     pub timestamp: Option<DateTime<Utc>>,
     pub level: LogLevel,
     pub scope: Option<String>,
@@ -57,6 +58,7 @@ mod tests {
     fn log_entry_roundtrips_through_serde() {
         let e = LogEntry {
             line_no: 1,
+            line_count: 1,
             timestamp: None,
             level: LogLevel::Info,
             scope: Some("auth".into()),

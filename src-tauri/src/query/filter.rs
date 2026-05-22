@@ -87,6 +87,7 @@ mod tests {
     fn entry(level: LogLevel, scope: Option<&str>, msg: &str) -> LogEntry {
         LogEntry {
             line_no: 1,
+            line_count: 1,
             timestamp: None,
             level,
             scope: scope.map(String::from),
@@ -153,7 +154,7 @@ mod tests {
         let mut fields = HashMap::new();
         fields.insert("request_id".into(), "req-abc".into());
         let e = LogEntry {
-            line_no: 1, timestamp: None, level: LogLevel::Info, scope: None,
+            line_no: 1, line_count: 1, timestamp: None, level: LogLevel::Info, scope: None,
             message: "x".into(), fields, raw: String::new(),
         };
         let spec = QuerySpec {

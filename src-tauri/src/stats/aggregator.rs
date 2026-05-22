@@ -30,7 +30,7 @@ mod tests {
 
     fn e(level: LogLevel, scope: Option<&str>) -> LogEntry {
         LogEntry {
-            line_no: 0, timestamp: None, level, scope: scope.map(String::from),
+            line_no: 0, line_count: 1, timestamp: None, level, scope: scope.map(String::from),
             message: String::new(), fields: HashMap::new(), raw: String::new(),
         }
     }

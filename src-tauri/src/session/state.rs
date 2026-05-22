@@ -71,6 +71,7 @@ mod tests {
     fn dummy_entry(line: u32) -> LogEntry {
         LogEntry {
             line_no: line,
+            line_count: 1,
             timestamp: None,
             level: LogLevel::Info,
             scope: None,

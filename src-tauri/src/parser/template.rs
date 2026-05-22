@@ -21,9 +21,10 @@ pub struct PartialEntry {
 }
 
 /// 把 PartialEntry 装配成完整 LogEntry
-pub fn finalize(line_no: u32, raw: &str, p: PartialEntry) -> LogEntry {
+pub fn finalize(line_no: u32, line_count: u32, raw: &str, p: PartialEntry) -> LogEntry {
     LogEntry {
         line_no,
+        line_count,
         timestamp: p.timestamp,
         level: p.level,
         scope: p.scope,
@@ -34,9 +35,10 @@ pub fn finalize(line_no: u32, raw: &str, p: PartialEntry) -> LogEntry {
 }
 
 /// 解析失败兜底：保留行内容，level=Unknown
-pub fn fallback(line_no: u32, raw: &str) -> LogEntry {
+pub fn fallback(line_no: u32, line_count: u32, raw: &str) -> LogEntry {
     LogEntry {
         line_no,
+        line_count,
         timestamp: None,
         level: crate::model::LogLevel::Unknown,
         scope: None,

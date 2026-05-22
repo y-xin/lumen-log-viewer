@@ -32,7 +32,7 @@ export function FilterBar() {
     return () => clearTimeout(t);
   }, [keyword, patchSpec]);
 
-  // debounce scope 三联
+  // debounce scope 三联：local 输入 → 写入 store
   useEffect(() => {
     const t = setTimeout(() => {
       patchSpec({
@@ -43,6 +43,19 @@ export function FilterBar() {
     }, 150);
     return () => clearTimeout(t);
   }, [scopeField, scopePattern, scopeMode, patchSpec]);
+
+  // 反向同步：spec.scope_filter 外部变化（如 StatsPanel/DetailDrawer 点击）→ 回填 local
+  // 用 JSON 比对当前 local 衍生值与 spec 是否一致，避免无限循环
+  useEffect(() => {
+    const localDerived = scopePattern
+      ? { field_name: scopeField, pattern: scopePattern, mode: scopeMode }
+      : null;
+    if (JSON.stringify(localDerived) === JSON.stringify(spec.scope_filter)) return;
+    setScopeField(spec.scope_filter?.field_name ?? 'scope');
+    setScopePattern(spec.scope_filter?.pattern ?? '');
+    setScopeMode(spec.scope_filter?.mode ?? 'glob');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spec.scope_filter]);
 
   // debounce 时间
   useEffect(() => {
@@ -93,12 +106,23 @@ export function FilterBar() {
         >
           {fieldOptions.map((f) => <option key={f} value={f}>{f}</option>)}
         </select>
-        <input
-          value={scopePattern}
-          onChange={(e) => setScopePattern(e.target.value)}
-          placeholder="模式（如 auth.* 或 user-service）"
-          className="border rounded px-2 py-0.5 text-xs flex-1 max-w-xs"
-        />
+        <div className="relative flex-1 max-w-xs">
+          <input
+            value={scopePattern}
+            onChange={(e) => setScopePattern(e.target.value)}
+            placeholder="模式（如 auth.* 或 user-service）"
+            className="border rounded px-2 py-0.5 text-xs w-full pr-6"
+          />
+          {scopePattern && (
+            <button
+              onClick={() => setScopePattern('')}
+              className="absolute right-1 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-xs leading-none px-1"
+              title="清除 scope 筛选"
+            >
+              ✕
+            </button>
+          )}
+        </div>
         <div className="flex border rounded overflow-hidden text-xs">
           {(['exact', 'glob', 'regex'] as const).map((m) => (
             <button

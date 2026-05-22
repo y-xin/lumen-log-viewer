@@ -262,6 +262,26 @@ export function LogList() {
   // selectedEntry 变化时也清缓存（防 row content 变化导致高度过期 — 实际无 height 变化，但保险）
   // 这里不做，避免不必要 reset。展开 toggle 和 spec 变化已经覆盖。
 
+  // ⌘G 跳到行号：在 entries 里找 line_no 匹配的项 → scrollToItem
+  // 不匹配时静默（GotoLineDialog 关闭，焦点回列表）
+  useEffect(() => {
+    const handler = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ lineNo: number }>).detail;
+      const target = detail?.lineNo;
+      if (!target || !listRef.current) return;
+      // 在当前已加载 entries 里找；找不到时遍历线性 — 数组较大时也 O(n)，但 ⌘G 不高频
+      const idx = entries.findIndex((e) => e?.line_no === target);
+      if (idx >= 0) {
+        listRef.current.scrollToItem(idx, 'center');
+      } else {
+        // 当前 matched 集里没有；做一个 fetchPage 试一试？为简化先静默忽略。
+        // 用户可清筛选条件后再试。
+      }
+    };
+    window.addEventListener('lv:goto-line', handler);
+    return () => window.removeEventListener('lv:goto-line', handler);
+  }, [entries]);
+
   const fetchPage = async (pageIdx: number) => {
     if (pendingPages.current.has(pageIdx)) return;
     pendingPages.current.add(pageIdx);

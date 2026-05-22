@@ -16,6 +16,7 @@ import { useFileDrop } from './hooks/useFileDrop';
 import { useAutoOpenRecent } from './hooks/useAutoOpenRecent';
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
 import { ShortcutsHelp } from './components/ShortcutsHelp';
+import { GotoLineDialog } from './components/GotoLineDialog';
 import { SniffQualityBanner } from './components/SniffQualityBanner';
 import { useEffect as useEffectInit } from 'react';
 import { getFontSize, saveFontSize } from './api/commands';
@@ -70,6 +71,7 @@ export default function App() {
       <DetailDrawer />
       <RotationDialog />
       <ShortcutsHelp />
+      <GotoLineDialog />
 
       {/* 拖拽文件 overlay：覆盖整个窗口，不阻挡 drag-leave/drop 事件传播 */}
       {isDragging && (

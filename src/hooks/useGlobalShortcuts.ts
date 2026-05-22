@@ -29,6 +29,7 @@ export function useGlobalShortcuts() {
       // ─── Esc：按优先级关闭 ─────────────────
       if (e.key === 'Escape') {
         if (s.helpOpen) { s.setHelpOpen(false); e.preventDefault(); return; }
+        if (s.gotoOpen) { s.setGotoOpen(false); e.preventDefault(); return; }
         if (s.rotationKind) { s.setRotationKind(null); e.preventDefault(); return; }
         if (s.selectedEntry) { s.setSelectedEntry(null); e.preventDefault(); return; }
         return;
@@ -92,6 +93,10 @@ export function useGlobalShortcuts() {
           return;
         case '0':
           s.setFontSize(12);
+          e.preventDefault();
+          return;
+        case 'g':
+          if (s.metadata) s.setGotoOpen(true);
           e.preventDefault();
           return;
       }

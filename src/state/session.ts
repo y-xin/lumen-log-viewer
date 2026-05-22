@@ -15,6 +15,9 @@ interface SessionStore {
   templates: TemplateInfo[];
   currentTemplateId: string | null;
 
+  selectedLineNo: number | null;
+  setSelectedLineNo: (n: number | null) => void;
+
   setMetadata: (m: FileMetadata | null) => void;
   setSpec: (s: QuerySpec) => void;
   patchSpec: (p: Partial<QuerySpec>) => void;
@@ -33,8 +36,13 @@ export const useSession = create<SessionStore>((set) => ({
   error: null,
   templates: [],
   currentTemplateId: null,
+  selectedLineNo: null,
 
-  setMetadata: (m) => set({ metadata: m, currentTemplateId: m?.template_id ?? null }),
+  setMetadata: (m) => set({
+    metadata: m,
+    currentTemplateId: m?.template_id ?? null,
+    selectedLineNo: null,
+  }),
   setSpec: (spec) => set({ spec }),
   patchSpec: (p) => set((s) => ({ spec: { ...s.spec, ...p } })),
   setResult: (result) => set({ result }),
@@ -42,4 +50,5 @@ export const useSession = create<SessionStore>((set) => ({
   setError: (error) => set({ error }),
 
   setTemplates: (templates) => set({ templates }),
+  setSelectedLineNo: (n) => set({ selectedLineNo: n }),
 }));

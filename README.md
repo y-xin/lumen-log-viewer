@@ -2,7 +2,9 @@
 
 桌面 GUI 日志查看与分析工具（Tauri + React + TypeScript）。
 
-## 当前状态：Plan 2b + Export 已完成
+## 当前状态：Plan 2b + Export + Style v3 已完成
+
+**最新视觉规范**：统一 28px 控件高度、Linear/Notion 风格、StatsPanel 瘦身、level 计数下沉到 footer。
 
 **核心能力**：
 - 6 种内置解析模板 + 自动嗅探 + 自定义模板（管理对话框 + 持久化）

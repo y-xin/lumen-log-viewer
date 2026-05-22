@@ -2,7 +2,15 @@
 // Rust 端 levels 是 HashSet，serde 会序列化为数组；TS 端用数组传入
 
 import { invoke } from '@tauri-apps/api/core';
-import type { FileMetadata, QueryResponse, QuerySpec, LogEntry } from '../types/log';
+import type {
+  FileMetadata,
+  QueryResponse,
+  QuerySpec,
+  LogEntry,
+  TemplateInfo,
+  CustomTemplate,
+  TestResult,
+} from '../types/log';
 
 /** 序列化 QuerySpec 时 levels 由数组转为后端可接受形态 */
 function serializeSpec(spec: QuerySpec): unknown {
@@ -28,4 +36,24 @@ export async function query(spec: QuerySpec, page: number, pageSize: number): Pr
 
 export async function getPage(spec: QuerySpec, page: number, pageSize: number): Promise<LogEntry[]> {
   return invoke<LogEntry[]>('cmd_get_page', { spec: serializeSpec(spec), page, pageSize });
+}
+
+export async function listTemplates(): Promise<TemplateInfo[]> {
+  return invoke<TemplateInfo[]>('cmd_list_templates');
+}
+
+export async function reparseWithTemplate(templateId: string): Promise<FileMetadata> {
+  return invoke<FileMetadata>('cmd_reparse_with_template', { templateId });
+}
+
+export async function saveCustomTemplate(tpl: CustomTemplate): Promise<void> {
+  return invoke<void>('cmd_save_custom_template', { tpl });
+}
+
+export async function deleteCustomTemplate(id: string): Promise<void> {
+  return invoke<void>('cmd_delete_custom_template', { id });
+}
+
+export async function testTemplate(tpl: CustomTemplate, limit: number): Promise<TestResult> {
+  return invoke<TestResult>('cmd_test_template', { tpl, limit });
 }

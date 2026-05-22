@@ -53,3 +53,47 @@ export interface AppErrorShape {
   kind: 'Io' | 'NoSession' | 'Parse' | 'Internal';
   message: string;
 }
+
+// ─── 模板相关 ───
+
+export interface TemplateInfo {
+  id: string;
+  name: string;
+  builtin: boolean;
+}
+
+export type TailParserKind = 'none' | 'json_object' | 'json_like';
+
+export interface CustomFieldMap {
+  timestamp?: string | null;
+  level?: string | null;
+  scope?: string | null;
+  message?: string | null;
+}
+
+export interface CustomTemplate {
+  id: string;
+  name: string;
+  pattern: string;
+  start_pattern: string;
+  time_formats: string[];
+  field_map: CustomFieldMap;
+  tail_parser: TailParserKind;
+}
+
+export interface TestSample {
+  line_no: number;
+  line_count: number;
+  raw: string;
+  ok: boolean;
+  message: string | null;
+  level: string | null;
+  scope: string | null;
+  fields_count: number;
+}
+
+export interface TestResult {
+  samples: TestSample[];
+  hit_rate: number;
+  field_completeness: number;
+}

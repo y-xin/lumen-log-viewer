@@ -12,9 +12,13 @@ interface RotatePayload { kind: string; }
 
 export function useTailFollow() {
   const { metadata, follow, appendEntries, setRotationKind, setError, setFollow } = useSession();
+  // 只关心"打开的文件是否变了"——不能依赖 metadata 对象本身，
+  // 因为 appendEntries 每来一条新日志都会重建 metadata（{...s.metadata, total}），
+  // 导致 effect 整轮重跑 + setMetadata 把 selectedEntry 清掉，抽屉闪一下就关了。
+  const path = metadata?.path ?? null;
 
   useEffect(() => {
-    if (!metadata) return;
+    if (!path) return;
     if (!follow) {
       stopFollow().catch(() => {});
       return;
@@ -47,5 +51,5 @@ export function useTailFollow() {
       unsubRotate?.();
       stopFollow().catch(() => {});
     };
-  }, [metadata, follow, appendEntries, setRotationKind, setError, setFollow]);
+  }, [path, follow, appendEntries, setRotationKind, setError, setFollow]);
 }

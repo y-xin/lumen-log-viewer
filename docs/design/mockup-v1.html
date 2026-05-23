@@ -1,0 +1,732 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Log Viewer — UI Design Mockup v1</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      fontFamily: {
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+        mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
+      },
+      colors: {
+        // 主色 — Indigo，比当前 Blue 克制
+        accent: {
+          50:  '#eef2ff',
+          100: '#e0e7ff',
+          500: '#6366f1',
+          600: '#4f46e5',
+          700: '#4338ca',
+        },
+        // Level 语义色（低饱和）
+        lv: {
+          error:   '#dc2626',
+          errorBg: '#fee2e2',
+          warn:    '#b45309',
+          warnBg:  '#fef3c7',
+          info:    '#2563eb',
+          infoBg:  '#dbeafe',
+          debug:   '#0891b2',
+          debugBg: '#cffafe',
+          trace:   '#475569',
+          traceBg: '#e2e8f0',
+          unknown: '#64748b',
+        },
+      },
+      boxShadow: {
+        card:    '0 1px 2px rgba(15,23,42,0.04), 0 1px 1px rgba(15,23,42,0.03)',
+        pop:     '0 8px 24px -8px rgba(15,23,42,0.18), 0 2px 6px rgba(15,23,42,0.06)',
+        drawer:  '-8px 0 24px -8px rgba(15,23,42,0.12)',
+      },
+    },
+  },
+};
+</script>
+<style>
+  html, body { background: #f8fafc; color: #0f172a; font-family: 'Inter', system-ui, sans-serif; }
+  .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+  /* Toolbar 控件统一 — 28px 高 */
+  .ctl {
+    height: 28px; display: inline-flex; align-items: center; gap: 6px;
+    padding: 0 10px; font-size: 12px; line-height: 1;
+    border: 1px solid #cbd5e1; border-radius: 6px;
+    background: #fff; color: #0f172a; cursor: pointer;
+    transition: background-color .12s ease, border-color .12s ease;
+  }
+  .ctl:hover { background: #f1f5f9; }
+  .ctl-primary { background: #4f46e5; color: #fff; border-color: #4f46e5; }
+  .ctl-primary:hover { background: #4338ca; }
+  .ctl-icon { padding: 0 8px; }
+  .chip {
+    height: 24px; display: inline-flex; align-items: center; gap: 4px;
+    padding: 0 8px; font-size: 11px; line-height: 1; border-radius: 4px;
+    font-weight: 500;
+  }
+  .row-base {
+    display: grid;
+    grid-template-columns: 64px 152px 56px 132px 1fr;
+    align-items: center; height: 26px;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 12px;
+    border-bottom: 1px solid #f1f5f9;
+    padding: 0 4px;
+  }
+  .row-base > * { padding: 0 8px; }
+  .row-base:hover { background: #f8fafc; }
+  .row-selected { background: #eef2ff !important; border-left: 2px solid #4f46e5; padding-left: 2px; }
+  .row-trace-link { background: #ecfdf5 !important; }
+  mark.hl { background: #fde68a; color: #0f172a; padding: 0 2px; border-radius: 2px; }
+  /* Sparkline area */
+  .spark { height: 50px; position: relative; }
+  /* 主色 dot 脉冲（FollowToggle 用） */
+  @keyframes ping {
+    0% { transform: scale(1); opacity: .75; }
+    75%, 100% { transform: scale(2.2); opacity: 0; }
+  }
+  .dot-pulse::after {
+    content: ''; position: absolute; inset: 0; border-radius: 9999px; background: currentColor;
+    animation: ping 1.4s cubic-bezier(0, 0, 0.2, 1) infinite;
+  }
+</style>
+</head>
+<body class="min-h-screen">
+
+<!-- Designer notes 顶部小条 — 实际 app 没有 -->
+<div class="bg-amber-50 border-b border-amber-200 text-xs text-amber-800 px-4 py-1.5 flex items-center gap-3">
+  <span class="font-semibold">📐 设计稿 v1</span>
+  <span class="text-amber-600">|</span>
+  <span>主色 Indigo · Inter + JetBrains Mono · 行高 26px · 三场景演示：常规、详情打开、tail-follow + 同 trace 染色</span>
+  <span class="ml-auto text-amber-600">非交互预览 · 仅审视觉</span>
+</div>
+
+<!-- ════════════════════════════════════════════════ -->
+<!-- 场景 1：常规查看（drawer 关）                    -->
+<!-- ════════════════════════════════════════════════ -->
+<section class="border-b-8 border-slate-200">
+  <div class="bg-slate-100 px-4 py-1.5 text-xs text-slate-500 font-semibold">
+    场景 1 — 常规：打开文件、筛选、看趋势
+  </div>
+
+  <!-- Header -->
+  <header class="flex items-center gap-3 px-4 py-2 bg-white border-b border-slate-200">
+    <div class="flex items-center gap-1.5">
+      <div class="w-5 h-5 rounded bg-accent-600 flex items-center justify-center text-white text-[10px] font-bold">L</div>
+      <h1 class="text-sm font-semibold text-slate-800">Log Viewer</h1>
+    </div>
+
+    <!-- OpenFileMenu segment -->
+    <div class="flex">
+      <button class="ctl rounded-r-none border-r-0">📂 打开</button>
+      <button class="ctl rounded-l-none px-2">▾</button>
+    </div>
+
+    <!-- Template menu -->
+    <button class="ctl">
+      <span class="text-slate-500">模板</span>
+      <span>bracket-electron</span>
+      <span class="text-slate-400">▾</span>
+    </button>
+
+    <!-- Follow chip (off) -->
+    <button class="chip border border-slate-300 bg-white text-slate-600">
+      <span class="relative inline-block w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+      实时跟踪
+    </button>
+
+    <!-- Notify chip (off) -->
+    <button class="chip border border-slate-300 bg-white text-slate-500">🔕</button>
+
+    <!-- Settings -->
+    <button class="ctl ctl-icon">⚙</button>
+
+    <!-- Path display (right-aligned) -->
+    <div class="ml-auto text-xs text-slate-400 mono truncate max-w-md" title="/Users/kim/Library/Logs/ChatKnow/main.log">
+      /Users/kim/Library/Logs/ChatKnow/main.log
+    </div>
+  </header>
+
+  <!-- FilterBar — Row 1: levels + actions -->
+  <div class="px-3 py-1.5 bg-white border-b border-slate-200 flex items-center gap-1.5 text-sm">
+    <span class="text-xs text-slate-500 mr-1">级别</span>
+    <button class="chip bg-lv-traceBg text-lv-trace uppercase tracking-wide">trace</button>
+    <button class="chip bg-lv-debugBg text-lv-debug uppercase tracking-wide">debug</button>
+    <button class="chip bg-lv-infoBg text-lv-info uppercase tracking-wide font-semibold">info</button>
+    <button class="chip bg-lv-warnBg text-lv-warn uppercase tracking-wide font-semibold">warn</button>
+    <button class="chip bg-lv-errorBg text-lv-error uppercase tracking-wide font-semibold">error</button>
+    <button class="chip bg-slate-100 text-slate-400 uppercase tracking-wide line-through">unknown</button>
+
+    <div class="ml-auto flex items-center gap-1.5">
+      <button class="ctl">▸ 高级筛选</button>
+      <button class="ctl">📌 筛选器 <span class="text-slate-400 ml-1">▾</span></button>
+      <button class="ctl">📥 导出 <span class="text-slate-400 ml-1">▾</span></button>
+    </div>
+  </div>
+
+  <!-- FilterBar — Row 2: keyword + time -->
+  <div class="px-3 py-1.5 bg-white border-b border-slate-200 flex items-center gap-1.5 text-sm">
+    <span class="text-xs text-slate-500 mr-1">关键词</span>
+    <div class="relative flex-1 max-w-md">
+      <input
+        class="w-full h-7 px-2.5 text-xs border border-slate-300 rounded-md bg-white focus:outline-none focus:border-accent-600 focus:ring-2 focus:ring-accent-100"
+        placeholder="在 message / 原始行中搜索 — ⌘F" value="login" />
+    </div>
+    <button class="ctl text-xs" title="切换正则">.Rx</button>
+
+    <span class="text-xs text-slate-500 ml-3">时间</span>
+    <input class="h-7 px-2 text-[11px] border border-slate-300 rounded-md mono w-44" value="2026-05-22 15:00" />
+    <span class="text-slate-300">~</span>
+    <input class="h-7 px-2 text-[11px] border border-slate-300 rounded-md mono w-44" value="2026-05-23 15:00" />
+    <button class="text-slate-400 hover:text-slate-700 text-xs px-1" title="清除">✕</button>
+  </div>
+
+  <!-- StatsPanel — sparkline + scope tags -->
+  <div class="bg-slate-50 px-3 py-2 border-b border-slate-200">
+    <!-- Sparkline mock (SVG static) -->
+    <div class="spark relative">
+      <!-- 顶部 5 tick -->
+      <div class="absolute top-0 left-0 right-0 flex justify-between text-[9px] text-slate-400 px-2 leading-none pt-0.5">
+        <span>05-22 15:00</span><span>05-22 21:00</span><span>05-23 03:00</span><span>05-23 09:00</span><span>05-23 15:00</span>
+      </div>
+      <!-- Area chart SVG -->
+      <svg class="absolute top-3 left-2 right-2 bottom-0 w-[calc(100%-16px)] h-9" viewBox="0 0 1000 36" preserveAspectRatio="none">
+        <!-- info (蓝) -->
+        <path d="M0,36 L0,28 C50,22 100,18 150,20 C200,22 250,16 300,12 C350,10 400,14 450,11 C500,9 550,15 600,8 C650,5 700,11 750,14 C800,17 850,10 900,13 C950,16 1000,18 1000,15 L1000,36 Z" fill="#dbeafe" stroke="#2563eb" stroke-width="0.8"/>
+        <!-- warn (橙) -->
+        <path d="M0,36 L0,33 C100,32 200,30 300,32 C400,33 500,31 600,28 C700,27 800,30 900,29 C950,29 1000,30 1000,30 L1000,36 Z" fill="#fef3c7" stroke="#b45309" stroke-width="0.6" opacity="0.95"/>
+        <!-- error spike (红) -->
+        <path d="M0,36 L0,35.5 L300,35.5 L320,33 L340,29 L360,33 L380,35.5 L600,35.5 L620,30 L640,24 L660,28 L680,35 L1000,35 L1000,36 Z" fill="#fee2e2" stroke="#dc2626" stroke-width="0.7"/>
+      </svg>
+    </div>
+    <!-- Scope tag row -->
+    <div class="mt-2 flex items-center gap-1.5 flex-wrap">
+      <button class="chip bg-white border border-slate-200 text-slate-700 hover:bg-slate-100">
+        main/network-manager <span class="text-slate-400 ml-1">128</span>
+      </button>
+      <button class="chip bg-accent-600 text-white border border-accent-600">
+        ✓ app-update <span class="text-accent-100 ml-1">96</span>
+      </button>
+      <button class="chip bg-white border border-slate-200 text-slate-700 hover:bg-slate-100">
+        renderer/file-watcher <span class="text-slate-400 ml-1">74</span>
+      </button>
+      <button class="chip bg-white border border-slate-200 text-slate-700 hover:bg-slate-100">
+        auth.session <span class="text-slate-400 ml-1">52</span>
+      </button>
+      <button class="chip bg-white border border-slate-200 text-slate-700 hover:bg-slate-100">
+        gost-api <span class="text-slate-400 ml-1">41</span>
+      </button>
+      <button class="chip bg-white border border-slate-200 text-slate-700 hover:bg-slate-100">
+        ipc.bridge <span class="text-slate-400 ml-1">27</span>
+      </button>
+      <button class="text-[11px] text-slate-500 hover:text-slate-800 ml-1 underline" title="清除 1 个选中">清除（1）</button>
+    </div>
+  </div>
+
+  <!-- LogList -->
+  <div class="bg-white">
+    <!-- Header -->
+    <div class="row-base !h-7 text-[11px] font-medium text-slate-500 bg-slate-50 border-b border-slate-200">
+      <span class="text-right">#</span>
+      <span>时间</span>
+      <span class="uppercase">级别</span>
+      <span>Scope</span>
+      <span class="flex items-center justify-between">
+        <span>Message + Fields</span>
+        <button class="text-slate-400 hover:text-slate-700 px-1" title="列设置">⚙</button>
+      </span>
+    </div>
+
+    <!-- Rows: 15 行真实感数据 -->
+    <div class="row-base">
+      <span class="text-right text-slate-400">1024</span>
+      <span class="text-slate-500">2026-05-22 15:34:32.520</span>
+      <span class="text-lv-info uppercase font-semibold">info</span>
+      <span class="text-slate-600 truncate">app-update</span>
+      <span class="truncate">checking for update from <mark class="hl">login</mark> service</span>
+    </div>
+    <div class="row-base">
+      <span class="text-right text-slate-400">1025</span>
+      <span class="text-slate-500">2026-05-22 15:34:32.529</span>
+      <span class="text-lv-debug uppercase">debug</span>
+      <span class="text-slate-600 truncate">renderer/file-watcher</span>
+      <span class="truncate">watch added: /Users/kim/Desktop/foo.txt</span>
+    </div>
+    <div class="row-base">
+      <span class="text-right text-slate-400">1026</span>
+      <span class="text-slate-500">2026-05-22 15:34:32.547</span>
+      <span class="text-lv-info uppercase font-semibold">info</span>
+      <span class="text-slate-600 truncate">main/network-manager</span>
+      <span class="truncate">tcp connection established to 10.0.4.18:443</span>
+    </div>
+    <div class="row-base">
+      <span class="text-right text-slate-400">1027</span>
+      <span class="text-slate-500">2026-05-22 15:34:32.561</span>
+      <span class="text-lv-warn uppercase font-semibold">warn</span>
+      <span class="text-slate-600 truncate">auth.session</span>
+      <span class="truncate"><mark class="hl">login</mark> rate limit approaching: 4/5 requests in window</span>
+    </div>
+    <div class="row-base row-selected">
+      <span class="text-right text-slate-400">1028</span>
+      <span class="text-slate-500">2026-05-22 15:34:32.578</span>
+      <span class="text-lv-error uppercase font-semibold">error</span>
+      <span class="text-slate-600 truncate">auth.session</span>
+      <span class="truncate"><mark class="hl">login</mark> failed: invalid credentials for user_id=u_8821</span>
+    </div>
+    <div class="row-base">
+      <span class="text-right text-slate-400">1029</span>
+      <span class="text-slate-500">2026-05-22 15:34:32.602</span>
+      <span class="text-lv-info uppercase font-semibold">info</span>
+      <span class="text-slate-600 truncate">main/network-manager</span>
+      <span class="truncate">request POST /v1/auth/<mark class="hl">login</mark> → 401 (28ms)</span>
+    </div>
+    <div class="row-base">
+      <span class="text-right text-slate-400">1030</span>
+      <span class="text-slate-500">2026-05-22 15:34:32.635</span>
+      <span class="text-lv-info uppercase font-semibold">info</span>
+      <span class="text-slate-600 truncate">app-update</span>
+      <span class="truncate">whenReady [ '/Applications/ChatKnow.app/Contents/MacOS/ChatKnow' ]</span>
+    </div>
+    <div class="row-base">
+      <span class="text-right text-slate-400">1031–1033 <span class="text-slate-300 text-[10px]">▸3</span></span>
+      <span class="text-slate-500">2026-05-22 15:34:32.640</span>
+      <span class="text-lv-error uppercase font-semibold">error</span>
+      <span class="text-slate-600 truncate">renderer</span>
+      <span class="truncate">Uncaught TypeError: Cannot read properties of undefined (reading 'name')</span>
+    </div>
+    <div class="row-base">
+      <span class="text-right text-slate-400">1034</span>
+      <span class="text-slate-500">2026-05-22 15:34:32.711</span>
+      <span class="text-lv-debug uppercase">debug</span>
+      <span class="text-slate-600 truncate">ipc.bridge</span>
+      <span class="truncate">channel "main:nav" handler registered</span>
+    </div>
+    <div class="row-base">
+      <span class="text-right text-slate-400">1035</span>
+      <span class="text-slate-500">2026-05-22 15:34:32.789</span>
+      <span class="text-lv-info uppercase font-semibold">info</span>
+      <span class="text-slate-600 truncate">gost-api</span>
+      <span class="truncate">GET /config → 200 status=200 latency_ms=12</span>
+    </div>
+    <div class="row-base">
+      <span class="text-right text-slate-400">1036</span>
+      <span class="text-slate-500">2026-05-22 15:34:32.812</span>
+      <span class="text-lv-trace uppercase">trace</span>
+      <span class="text-slate-600 truncate">main/network-manager</span>
+      <span class="truncate">heartbeat sent to ws://relay.local:8443</span>
+    </div>
+    <div class="row-base">
+      <span class="text-right text-slate-400">1037</span>
+      <span class="text-slate-500">2026-05-22 15:34:32.901</span>
+      <span class="text-lv-info uppercase font-semibold">info</span>
+      <span class="text-slate-600 truncate">auth.session</span>
+      <span class="truncate">user u_8821 retry <mark class="hl">login</mark> attempt 2/3</span>
+    </div>
+    <div class="row-base">
+      <span class="text-right text-slate-400">1038</span>
+      <span class="text-slate-500">2026-05-22 15:34:33.024</span>
+      <span class="text-lv-info uppercase font-semibold">info</span>
+      <span class="text-slate-600 truncate">auth.session</span>
+      <span class="truncate"><mark class="hl">login</mark> succeeded: u_8821 (totp verified)</span>
+    </div>
+    <div class="row-base">
+      <span class="text-right text-slate-400">1039</span>
+      <span class="text-slate-500">2026-05-22 15:34:33.117</span>
+      <span class="text-lv-warn uppercase font-semibold">warn</span>
+      <span class="text-slate-600 truncate">main/network-manager</span>
+      <span class="truncate">slow request POST /v1/sync → 1284ms (threshold 500ms)</span>
+    </div>
+    <div class="row-base">
+      <span class="text-right text-slate-400">1040</span>
+      <span class="text-slate-500">2026-05-22 15:34:33.241</span>
+      <span class="text-lv-debug uppercase">debug</span>
+      <span class="text-slate-600 truncate">ipc.bridge</span>
+      <span class="truncate">channel "renderer:toast" message="同步完成"</span>
+    </div>
+
+    <!-- Footer status bar -->
+    <div class="flex items-center gap-3 px-3 py-1 text-[11px] border-t border-slate-200 bg-slate-50 flex-wrap">
+      <span class="font-semibold text-slate-700">匹配 <span class="mono">12,847</span> 条</span>
+      <span class="text-slate-300">·</span>
+      <span class="text-lv-error font-medium">ERROR 142</span>
+      <span class="text-slate-300">·</span>
+      <span class="text-lv-warn font-medium">WARN 386</span>
+      <span class="text-slate-300">·</span>
+      <span class="text-lv-info font-medium">INFO 11,209</span>
+      <span class="text-slate-300">·</span>
+      <span class="text-lv-debug font-medium">DEBUG 1,089</span>
+      <span class="text-slate-300">·</span>
+      <span class="text-lv-trace font-medium">TRACE 21</span>
+      <span class="ml-auto text-slate-400 mono">cache hit · 12ms</span>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════ -->
+<!-- 场景 2：详情抽屉打开 + 同 trace 染色             -->
+<!-- ════════════════════════════════════════════════ -->
+<section class="border-b-8 border-slate-200">
+  <div class="bg-slate-100 px-4 py-1.5 text-xs text-slate-500 font-semibold">
+    场景 2 — 详情抽屉 + 同 trace 染色（选中行 user_id=u_8821 的所有 entries 浅绿背景）
+  </div>
+
+  <div class="relative" style="height: 580px;">
+    <!-- 主体（被 drawer 遮一半） -->
+    <div class="absolute inset-0 flex flex-col">
+      <!-- 用一行 header 占位 + 简化 FilterBar + 列表 -->
+      <header class="flex items-center gap-3 px-4 py-2 bg-white border-b border-slate-200">
+        <div class="flex items-center gap-1.5">
+          <div class="w-5 h-5 rounded bg-accent-600 flex items-center justify-center text-white text-[10px] font-bold">L</div>
+          <h1 class="text-sm font-semibold text-slate-800">Log Viewer</h1>
+        </div>
+        <div class="flex">
+          <button class="ctl rounded-r-none border-r-0">📂 打开</button>
+          <button class="ctl rounded-l-none px-2">▾</button>
+        </div>
+        <button class="ctl"><span class="text-slate-500">模板</span><span>bracket-electron</span><span class="text-slate-400">▾</span></button>
+        <button class="chip border border-emerald-300 bg-emerald-50 text-emerald-700">
+          <span class="relative inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 text-emerald-400 dot-pulse"></span>
+          实时跟踪
+        </button>
+        <button class="chip border border-amber-300 bg-amber-50 text-amber-700">🔔</button>
+        <button class="ctl ctl-icon">⚙</button>
+        <div class="ml-auto text-xs text-slate-400 mono truncate max-w-xs">…ChatKnow/main.log</div>
+      </header>
+
+      <!-- 简化 FilterBar -->
+      <div class="px-3 py-1.5 bg-white border-b border-slate-200 flex items-center gap-1.5 text-sm">
+        <span class="text-xs text-slate-500 mr-1">级别</span>
+        <button class="chip bg-slate-100 text-slate-400 uppercase line-through">trace</button>
+        <button class="chip bg-slate-100 text-slate-400 uppercase line-through">debug</button>
+        <button class="chip bg-lv-infoBg text-lv-info uppercase font-semibold">info</button>
+        <button class="chip bg-lv-warnBg text-lv-warn uppercase font-semibold">warn</button>
+        <button class="chip bg-lv-errorBg text-lv-error uppercase font-semibold">error</button>
+        <button class="chip bg-slate-100 text-slate-400 uppercase line-through">unknown</button>
+        <div class="ml-auto flex items-center gap-1.5">
+          <button class="ctl">▸ 高级筛选</button>
+          <button class="ctl ctl-primary">📌 筛选器 ● <span class="ml-1">▾</span></button>
+          <button class="ctl">📥 导出 <span class="text-slate-400 ml-1">▾</span></button>
+        </div>
+      </div>
+
+      <!-- LogList (右侧被 drawer 遮) -->
+      <div class="flex-1 bg-white overflow-hidden">
+        <div class="row-base !h-7 text-[11px] font-medium text-slate-500 bg-slate-50 border-b border-slate-200">
+          <span class="text-right">#</span>
+          <span>时间</span>
+          <span class="uppercase">级别</span>
+          <span>Scope</span>
+          <span>Message + Fields</span>
+        </div>
+        <div class="row-base row-trace-link">
+          <span class="text-right text-slate-400">1027</span>
+          <span class="text-slate-500">…32.561</span>
+          <span class="text-lv-warn uppercase font-semibold">warn</span>
+          <span class="text-slate-600 truncate">auth.session</span>
+          <span class="truncate">login rate limit approaching: 4/5 requests trace_id=tr-9f2</span>
+        </div>
+        <div class="row-base row-selected row-trace-link">
+          <span class="text-right text-slate-400">1028</span>
+          <span class="text-slate-500">…32.578</span>
+          <span class="text-lv-error uppercase font-semibold">error</span>
+          <span class="text-slate-600 truncate">auth.session</span>
+          <span class="truncate">login failed: invalid credentials for user_id=u_8821 trace_id=tr-9f2</span>
+        </div>
+        <div class="row-base row-trace-link">
+          <span class="text-right text-slate-400">1029</span>
+          <span class="text-slate-500">…32.602</span>
+          <span class="text-lv-info uppercase font-semibold">info</span>
+          <span class="text-slate-600 truncate">main/network-manager</span>
+          <span class="truncate">request POST /v1/auth/login → 401 (28ms) trace_id=tr-9f2</span>
+        </div>
+        <div class="row-base">
+          <span class="text-right text-slate-400">1030</span>
+          <span class="text-slate-500">…32.635</span>
+          <span class="text-lv-info uppercase font-semibold">info</span>
+          <span class="text-slate-600 truncate">app-update</span>
+          <span class="truncate">whenReady [ '/Applications/ChatKnow.app/...' ]</span>
+        </div>
+        <div class="row-base">
+          <span class="text-right text-slate-400">1031–1033 <span class="text-slate-300 text-[10px]">▸3</span></span>
+          <span class="text-slate-500">…32.640</span>
+          <span class="text-lv-error uppercase font-semibold">error</span>
+          <span class="text-slate-600 truncate">renderer</span>
+          <span class="truncate">Uncaught TypeError: Cannot read properties of undefined</span>
+        </div>
+        <div class="row-base row-trace-link">
+          <span class="text-right text-slate-400">1037</span>
+          <span class="text-slate-500">…32.901</span>
+          <span class="text-lv-info uppercase font-semibold">info</span>
+          <span class="text-slate-600 truncate">auth.session</span>
+          <span class="truncate">user u_8821 retry login attempt 2/3 trace_id=tr-9f2</span>
+        </div>
+        <div class="row-base row-trace-link">
+          <span class="text-right text-slate-400">1038</span>
+          <span class="text-slate-500">…33.024</span>
+          <span class="text-lv-info uppercase font-semibold">info</span>
+          <span class="text-slate-600 truncate">auth.session</span>
+          <span class="truncate">login succeeded: u_8821 (totp verified) trace_id=tr-9f2</span>
+        </div>
+        <div class="row-base">
+          <span class="text-right text-slate-400">1039</span>
+          <span class="text-slate-500">…33.117</span>
+          <span class="text-lv-warn uppercase font-semibold">warn</span>
+          <span class="text-slate-600 truncate">main/network-manager</span>
+          <span class="truncate">slow request POST /v1/sync → 1284ms (threshold 500ms)</span>
+        </div>
+      </div>
+
+      <!-- Floating jump-to-bottom + new entries pill -->
+      <div class="absolute bottom-14 right-[36%]">
+        <button class="px-3 py-1.5 text-xs rounded-full bg-accent-600 text-white shadow-pop hover:bg-accent-700">
+          ↓ 3 条新日志
+        </button>
+      </div>
+    </div>
+
+    <!-- DetailDrawer -->
+    <aside class="absolute top-0 bottom-0 right-0 w-[34%] min-w-[400px] bg-white border-l border-slate-200 shadow-drawer flex flex-col">
+      <!-- 头部 -->
+      <header class="flex items-center gap-2 px-3 py-2 border-b border-slate-200">
+        <button class="ctl ctl-icon" title="上一条 (↑)">↑</button>
+        <button class="ctl ctl-icon" title="下一条 (↓)">↓</button>
+        <span class="text-[11px] text-slate-500 mono">第 5 / 共 142 条 error 匹配</span>
+        <h3 class="text-sm font-semibold ml-2">详情 #1028</h3>
+        <button class="ml-auto text-slate-400 hover:text-slate-700 px-2" title="关闭 (Esc)">✕</button>
+      </header>
+
+      <div class="flex-1 overflow-y-auto p-4 space-y-4 text-sm">
+        <!-- Field grid -->
+        <section class="grid grid-cols-2 gap-2 text-xs">
+          <div>
+            <div class="text-slate-500 mb-0.5">时间</div>
+            <div class="mono font-medium">2026-05-22 15:34:32.578</div>
+          </div>
+          <div>
+            <div class="text-slate-500 mb-0.5">级别</div>
+            <div class="font-semibold text-lv-error">ERROR</div>
+          </div>
+          <div>
+            <div class="text-slate-500 mb-0.5">Scope</div>
+            <div class="mono">auth.session</div>
+          </div>
+          <div>
+            <div class="text-slate-500 mb-0.5">行号</div>
+            <div class="mono">1028</div>
+          </div>
+        </section>
+
+        <!-- Message -->
+        <section>
+          <div class="text-xs text-slate-500 mb-1">Message</div>
+          <div class="border border-slate-200 rounded p-2.5 mono text-xs whitespace-pre-wrap break-words bg-slate-50/50">
+            <mark class="hl">login</mark> failed: invalid credentials for user_id=u_8821
+          </div>
+        </section>
+
+        <!-- Fields -->
+        <section>
+          <div class="text-xs text-slate-500 mb-1">Fields <span class="text-slate-400">(4)</span></div>
+          <div class="border border-slate-200 rounded divide-y divide-slate-100 text-xs">
+            <div class="flex gap-2 px-2.5 py-1.5 mono">
+              <span class="text-slate-500 min-w-[88px]">user_id</span>
+              <span class="flex-1 break-all">u_8821</span>
+            </div>
+            <div class="flex gap-2 px-2.5 py-1.5 mono">
+              <span class="text-slate-500 min-w-[88px]">trace_id</span>
+              <span class="flex-1 break-all text-accent-700">tr-9f2-aef</span>
+            </div>
+            <div class="flex gap-2 px-2.5 py-1.5 mono">
+              <span class="text-slate-500 min-w-[88px]">attempt</span>
+              <span class="flex-1 break-all">1</span>
+            </div>
+            <div class="flex gap-2 px-2.5 py-1.5 mono">
+              <span class="text-slate-500 min-w-[88px]">remote_ip</span>
+              <span class="flex-1 break-all">10.0.4.18</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- Raw -->
+        <section>
+          <div class="flex items-center justify-between mb-1 gap-2">
+            <span class="text-xs text-slate-500">Raw</span>
+            <div class="flex items-center gap-2 text-xs">
+              <button class="text-accent-600 hover:underline">📋 raw</button>
+              <button class="text-accent-600 hover:underline">📋 JSON</button>
+              <button class="text-accent-600 hover:underline">💾 导出</button>
+            </div>
+          </div>
+          <div class="border border-slate-200 rounded p-2.5 mono text-xs whitespace-pre-wrap break-words bg-slate-50">
+[2026-05-22 15:34:32.578] [error] [auth.session] <mark class="hl">login</mark> failed: invalid credentials for user_id=u_8821 { user_id: 'u_8821', trace_id: 'tr-9f2-aef', attempt: 1, remote_ip: '10.0.4.18' }
+          </div>
+        </section>
+
+        <!-- Quick filter actions -->
+        <section class="flex gap-2 pt-1">
+          <button class="ctl">应用 scope 筛选</button>
+          <button class="ctl">按时间区间 ±5 分钟</button>
+        </section>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════ -->
+<!-- 场景 3：Settings 面板                            -->
+<!-- ════════════════════════════════════════════════ -->
+<section>
+  <div class="bg-slate-100 px-4 py-1.5 text-xs text-slate-500 font-semibold">
+    场景 3 — Settings 面板（⌘, / ⚙）— 4 tab 之 颜色
+  </div>
+
+  <div class="relative bg-slate-50" style="height: 540px;">
+    <!-- Backdrop -->
+    <div class="absolute inset-0 bg-slate-900/40"></div>
+
+    <!-- Modal -->
+    <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[720px] h-[460px] bg-white rounded-lg shadow-pop flex overflow-hidden">
+      <!-- 左侧 tab -->
+      <aside class="w-36 border-r border-slate-200 bg-slate-50 flex flex-col text-sm">
+        <div class="px-3 py-2.5 font-semibold text-slate-800 border-b border-slate-200">设置</div>
+        <button class="px-3 py-2 text-left hover:bg-slate-100 text-slate-600">通用</button>
+        <button class="px-3 py-2 text-left bg-accent-50 text-accent-700 font-medium border-r-2 border-accent-600">颜色</button>
+        <button class="px-3 py-2 text-left hover:bg-slate-100 text-slate-600">快捷键</button>
+        <button class="px-3 py-2 text-left hover:bg-slate-100 text-slate-600">解析模板</button>
+        <div class="mt-auto px-3 py-2 text-[10px] text-slate-400 border-t border-slate-200">设置实时生效</div>
+      </aside>
+
+      <!-- 右侧 -->
+      <section class="flex-1 flex flex-col">
+        <header class="flex items-center justify-between px-4 py-2.5 border-b border-slate-200">
+          <h3 class="text-sm font-semibold">颜色</h3>
+          <button class="text-slate-400 hover:text-slate-700 text-sm">✕</button>
+        </header>
+        <div class="flex-1 overflow-y-auto p-5 text-sm space-y-6">
+
+          <div>
+            <div class="flex items-baseline gap-2 mb-3">
+              <h4 class="font-medium text-slate-800">主色调（accent）</h4>
+              <span class="text-[11px] text-slate-400">影响主按钮 / 选中态 / focus ring / 选区蓝条</span>
+            </div>
+            <div class="flex gap-2">
+              <button class="flex items-center gap-2 px-2.5 py-1.5 rounded border border-slate-700 ring-2 ring-slate-300 bg-white text-xs">
+                <span class="w-4 h-4 rounded" style="background:#4f46e5"></span> Indigo
+              </button>
+              <button class="flex items-center gap-2 px-2.5 py-1.5 rounded border border-slate-200 hover:border-slate-400 bg-white text-xs">
+                <span class="w-4 h-4 rounded" style="background:#2563eb"></span> 蓝
+              </button>
+              <button class="flex items-center gap-2 px-2.5 py-1.5 rounded border border-slate-200 hover:border-slate-400 bg-white text-xs">
+                <span class="w-4 h-4 rounded" style="background:#7c3aed"></span> 紫
+              </button>
+              <button class="flex items-center gap-2 px-2.5 py-1.5 rounded border border-slate-200 hover:border-slate-400 bg-white text-xs">
+                <span class="w-4 h-4 rounded" style="background:#0d9488"></span> 青
+              </button>
+              <button class="flex items-center gap-2 px-2.5 py-1.5 rounded border border-slate-200 hover:border-slate-400 bg-white text-xs">
+                <span class="w-4 h-4 rounded" style="background:#e11d48"></span> 玫红
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <div class="flex items-baseline gap-2 mb-3">
+              <h4 class="font-medium text-slate-800">关键词高亮色</h4>
+              <span class="text-[11px] text-slate-400">影响搜索命中的 <mark class="hl">mark</mark> 背景色</span>
+            </div>
+            <div class="flex gap-2">
+              <button class="flex items-center gap-2 px-2.5 py-1.5 rounded border border-slate-700 ring-2 ring-slate-300 bg-white text-xs">
+                <span class="w-4 h-4 rounded" style="background:#fde68a"></span> 黄
+              </button>
+              <button class="flex items-center gap-2 px-2.5 py-1.5 rounded border border-slate-200 hover:border-slate-400 bg-white text-xs">
+                <span class="w-4 h-4 rounded" style="background:#a7f3d0"></span> 绿
+              </button>
+              <button class="flex items-center gap-2 px-2.5 py-1.5 rounded border border-slate-200 hover:border-slate-400 bg-white text-xs">
+                <span class="w-4 h-4 rounded" style="background:#fbcfe8"></span> 粉
+              </button>
+              <button class="flex items-center gap-2 px-2.5 py-1.5 rounded border border-slate-200 hover:border-slate-400 bg-white text-xs">
+                <span class="w-4 h-4 rounded" style="background:#bae6fd"></span> 天蓝
+              </button>
+            </div>
+            <div class="mt-3 text-xs text-slate-500">
+              预览：用户搜索 <span class="mono">login</span> 时，匹配的内容像这样
+              <mark class="hl">login</mark> 显示。
+            </div>
+          </div>
+
+          <div>
+            <div class="flex items-baseline gap-2 mb-3">
+              <h4 class="font-medium text-slate-800">主题</h4>
+              <span class="text-[11px] text-slate-400">dark 模式当前为实验性</span>
+            </div>
+            <div class="flex gap-2">
+              <button class="ctl ctl-primary">☀ 亮色</button>
+              <button class="ctl">🌙 暗色（实验性）</button>
+            </div>
+          </div>
+
+        </div>
+      </section>
+    </div>
+  </div>
+</section>
+
+<!-- 设计 token / 规范说明 -->
+<section class="bg-white border-t-8 border-slate-200">
+  <div class="px-6 py-5 max-w-5xl mx-auto">
+    <h2 class="text-base font-semibold text-slate-800 mb-3">📋 设计 Token 与规范</h2>
+    <div class="grid grid-cols-2 gap-x-8 gap-y-4 text-xs text-slate-600">
+      <div>
+        <div class="font-semibold text-slate-700 mb-1">主色</div>
+        <div class="flex items-center gap-3">
+          <div class="w-8 h-8 rounded" style="background:#4f46e5"></div>
+          <div>
+            <div class="mono">Indigo-600 #4f46e5</div>
+            <div class="text-slate-500">替换原蓝色 #2563eb — 更克制、开发者友好</div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="font-semibold text-slate-700 mb-1">字体</div>
+        <div class="mono text-[11px]">Inter 12/13/14 (UI) · JetBrains Mono 12 (log/data)</div>
+      </div>
+      <div>
+        <div class="font-semibold text-slate-700 mb-1">行高</div>
+        <div class="mono text-[11px]">26px row · 28px control · 24px chip</div>
+      </div>
+      <div>
+        <div class="font-semibold text-slate-700 mb-1">圆角</div>
+        <div class="mono text-[11px]">4px chip · 6px ctl/input · 8px modal/card</div>
+      </div>
+      <div>
+        <div class="font-semibold text-slate-700 mb-1">阴影</div>
+        <div class="mono text-[11px]">card (flat) · pop (dropdown) · drawer (deep)</div>
+      </div>
+      <div>
+        <div class="font-semibold text-slate-700 mb-1">间距</div>
+        <div class="mono text-[11px]">4 · 6 · 8 · 12 · 16 · 24 (8px 系统)</div>
+      </div>
+    </div>
+
+    <h3 class="text-sm font-semibold text-slate-800 mt-6 mb-2">📐 关键改动 vs 当前实现</h3>
+    <ol class="list-decimal list-inside text-xs text-slate-600 space-y-1.5">
+      <li>主色 <span class="mono">#2563eb</span> → <span class="mono">#4f46e5</span>（Indigo）— 减少蓝色饱和度，更像专业开发工具</li>
+      <li>行高 28 → 26px — 单屏多 8% 行数，长列表更经济</li>
+      <li>列表字体 ui-monospace → <span class="font-mono">JetBrains Mono</span> — 数字字符宽度恒定、可读性更好</li>
+      <li>Logo + 标题区 — 当前裸标题，加 5×5 实心方块 logo 视觉锚点</li>
+      <li>Level chip 配色 — 当前 bg-blue-200 / text-blue-800 偏强；改为 bg-blue-100 / text-blue-700 更柔和</li>
+      <li>Sparkline 时间轴字号 — 9px 灰色，明确"参考用"，不与数据竞争</li>
+      <li>选中行 — 当前 bg-blue-50；改为 bg-indigo-50 + 2px 左侧 indigo border，定位更明确</li>
+      <li>Drawer 头部按钮 — ↑/↓ 用 ctl-icon 紧凑变体（28×28 方形）</li>
+      <li>Footer 状态栏 — 加 mono 字体的 cache hit / latency 显示（最右侧），传达"快"的感觉</li>
+      <li>Empty state / Loading state — 设计稿暂未画，后续补</li>
+    </ol>
+  </div>
+</section>
+
+</body>
+</html>

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import {
-  listTemplates, saveCustomTemplate, deleteCustomTemplate, testTemplate,
+  listTemplates, saveCustomTemplate, deleteCustomTemplate, testTemplate, listCustomTemplates, getCustomTemplate,
 } from '../api/commands';
 import { useSession } from '../state/session';
 import type { CustomTemplate, TemplateInfo, TestResult, TailParserKind } from '../types/log';
@@ -106,12 +106,86 @@ export function TemplateManagerDialog({ onClose }: Props) {
     setEditing((prev) => ({ ...prev, field_map: { ...prev.field_map, [k]: v || null } }));
   };
 
+  // 导出全部自定义模板为 JSON 文件
+  const handleExportAll = async () => {
+    setError(null);
+    try {
+      const customs = await listCustomTemplates();
+      if (customs.length === 0) {
+        setError('没有自定义模板可导出');
+        return;
+      }
+      const json = JSON.stringify(customs, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const ts = new Date().toISOString().slice(0, 10);
+      a.download = `log-viewer-templates-${ts}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setError(`导出失败：${e}`);
+    }
+  };
+
+  // 导入：让用户选 JSON 文件，逐条 saveCustomTemplate（覆盖同 id）
+  const handleImportFile = async (file: File) => {
+    setError(null);
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      const arr = Array.isArray(parsed) ? parsed : [parsed]; // 兼容单条对象 / 数组
+      let ok = 0; let fail = 0;
+      for (const tpl of arr) {
+        try { await saveCustomTemplate(tpl as CustomTemplate); ok++; } catch { fail++; }
+      }
+      await refresh();
+      setError(fail > 0 ? `导入完成：${ok} 成功 / ${fail} 失败` : null);
+    } catch (e) {
+      setError(`导入失败：JSON 解析错或文件结构不符（${e}）`);
+    }
+  };
+
+  // 编辑：从后端拿完整模板数据填进表单
+  const handleEditCustom = async (id: string) => {
+    setError(null);
+    try {
+      const tpl = await getCustomTemplate(id);
+      if (!tpl) { setError(`找不到模板 ${id}`); return; }
+      setEditing(tpl);
+      setTestResult(null);
+    } catch (e) {
+      setError(`加载模板失败：${e}`);
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-30">
       <div className="bg-white w-[70vw] h-[80vh] rounded shadow-xl flex flex-col">
-        <header className="flex items-center justify-between px-4 py-2 border-b">
+        <header className="flex items-center justify-between px-4 py-2 border-b gap-3">
           <h2 className="font-semibold">模板管理</h2>
-          <button onClick={onClose} className="text-slate-500 hover:text-slate-700">✕</button>
+          <div className="flex items-center gap-2">
+            <label className="ctl cursor-pointer" title="导入 JSON（数组或单对象，按 id 覆盖）">
+              ⬆ 导入
+              <input
+                type="file"
+                accept="application/json,.json"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) handleImportFile(f);
+                  e.target.value = '';   // 允许同一文件再次选择
+                }}
+              />
+            </label>
+            <button onClick={handleExportAll} className="ctl" title="导出全部自定义模板为 JSON">
+              ⬇ 导出
+            </button>
+            <button onClick={onClose} className="text-slate-500 hover:text-slate-700 px-2">✕</button>
+          </div>
         </header>
         <div className="flex-1 flex overflow-hidden">
           <aside className="w-56 border-r overflow-y-auto p-2 text-sm">
@@ -132,8 +206,9 @@ export function TemplateManagerDialog({ onClose }: Props) {
             {list.filter((t) => !t.builtin).map((t) => (
               <div key={t.id} className="flex items-center gap-1">
                 <button
-                  onClick={() => startEdit(t)}
+                  onClick={() => handleEditCustom(t.id)}
                   className="flex-1 text-left px-2 py-1 rounded hover:bg-slate-100"
+                  title="点击编辑此模板"
                 >
                   {t.name}
                 </button>

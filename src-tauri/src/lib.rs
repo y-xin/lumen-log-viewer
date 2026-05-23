@@ -40,6 +40,8 @@ pub fn run() {
             commands::cmd_reparse_with_template,
             commands::cmd_save_custom_template,
             commands::cmd_delete_custom_template,
+            commands::cmd_list_custom_templates,
+            commands::cmd_get_custom_template,
             commands::cmd_test_template,
             commands::cmd_start_follow,
             commands::cmd_stop_follow,

@@ -193,6 +193,21 @@ pub fn cmd_save_custom_template(
     Ok(())
 }
 
+/// 列出所有自定义模板（完整数据，供导出 / 编辑前置数据加载）
+#[tauri::command]
+pub fn cmd_list_custom_templates(prefs_store: State<'_, PrefsStore>) -> Vec<CustomTemplate> {
+    prefs_store.load().custom_templates
+}
+
+/// 按 id 查单个自定义模板（编辑对话框预填用）
+#[tauri::command]
+pub fn cmd_get_custom_template(
+    id: String,
+    prefs_store: State<'_, PrefsStore>,
+) -> Option<CustomTemplate> {
+    prefs_store.load().custom_templates.into_iter().find(|t| t.id == id)
+}
+
 #[tauri::command]
 pub fn cmd_delete_custom_template(
     id: String,

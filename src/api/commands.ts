@@ -62,6 +62,14 @@ export async function deleteCustomTemplate(id: string): Promise<void> {
   return invoke<void>('cmd_delete_custom_template', { id });
 }
 
+export async function listCustomTemplates(): Promise<CustomTemplate[]> {
+  return invoke<CustomTemplate[]>('cmd_list_custom_templates');
+}
+
+export async function getCustomTemplate(id: string): Promise<CustomTemplate | null> {
+  return invoke<CustomTemplate | null>('cmd_get_custom_template', { id });
+}
+
 export async function testTemplate(tpl: CustomTemplate, limit: number): Promise<TestResult> {
   return invoke<TestResult>('cmd_test_template', { tpl, limit });
 }

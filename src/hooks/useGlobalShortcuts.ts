@@ -8,6 +8,7 @@
 import { useEffect } from 'react';
 import { useSession } from '../state/session';
 import { openFileViaDialog } from '../api/dialog';
+import { getNeighbor } from '../api/commands';
 import type { LogLevel } from '../types/log';
 
 const ALL_LEVELS: LogLevel[] = ['trace', 'debug', 'info', 'warn', 'error', 'unknown'];
@@ -39,6 +40,21 @@ export function useGlobalShortcuts() {
       if (!mod && e.key === '?' && !isTypingTarget(e)) {
         s.setHelpOpen(!s.helpOpen);
         e.preventDefault();
+        return;
+      }
+
+      // ─── ↑/↓ 在 drawer 打开时切换相邻 matched entry（非输入态） ───
+      if (!mod && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && s.selectedEntry && !isTypingTarget(e)) {
+        const dir = e.key === 'ArrowUp' ? 'prev' : 'next';
+        const lineNo = s.selectedEntry.line_no;
+        // 异步：不 block 事件循环；防默认（避免触发列表 / 输入框滚动）
+        e.preventDefault();
+        getNeighbor(s.spec, lineNo, dir).then((n) => {
+          if (!n) return;
+          useSession.getState().setSelectedEntry(n.entry);
+          // 同步滚动列表（drawer 内 useEffect 也会刷新 position/total）
+          window.dispatchEvent(new CustomEvent('lv:goto-line', { detail: { lineNo: n.entry.line_no } }));
+        }).catch(() => {});
         return;
       }
 

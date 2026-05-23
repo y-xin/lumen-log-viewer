@@ -21,6 +21,7 @@ const ITEMS: Item[] = [
   { keys: `${M} -`, desc: '日志字号 -' },
   { keys: `${M} 0`, desc: '日志字号重置' },
   { keys: `${M} G`, desc: '跳到行号' },
+  { keys: '↑ / ↓',  desc: '详情抽屉打开时 — 切上/下一条 matched' },
   { keys: '?',      desc: '本帮助' },
   { keys: 'Esc',    desc: '关闭抽屉 / 弹窗 / 本帮助' },
 ];

@@ -15,6 +15,7 @@
 - **同 trace 染色**：选中含 trace_id / request_id / session_id 等字段的 entry 时，所有同值行用浅绿背景
 - **桌面通知**：tail-follow 时新 ERROR 触发系统通知（窗口未聚焦才弹），头部 🔔/🔕 toggle 控制
 - **自定义模板编辑 + 导入/导出 JSON**：可改写已有自定义模板；模板管理对话框顶部 ⬆⬇ 跨设备共享
+- **统一设置面板（⚙ / ⌘,）**：4 tab — 通用（字号、主题）/ 颜色（主色调 + 高亮色）/ 快捷键（一览）/ 模板（管理入口）。视觉偏好走 localStorage 即时生效；dark 模式当前为实验性
 - 多行 entry 自动合并（如 electron-log 尾部 JSON 跨多行）
 - bracket-electron 同时支持 `[scope]` 和 `(scope)` 两种 scope 写法
 - 按级别 / scope（exact/glob/regex + Top scope 多选）/ 时间区间 / 关键词筛选

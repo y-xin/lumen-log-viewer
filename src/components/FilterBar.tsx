@@ -151,6 +151,26 @@ export function FilterBar() {
 
   const activeLevels = new Set(spec.levels ?? LEVELS);
 
+  // 高级筛选（scope_filter 行）折叠：
+  // - 默认收起；如果 spec.scope_filter 已经有值，自动展开避免用户找不到当前生效的筛选
+  // - localStorage 记忆用户偏好（展开 / 收起）
+  const [advOpen, setAdvOpen] = useState<boolean>(() => {
+    if (spec.scope_filter) return true;
+    try { return localStorage.getItem('lv:adv-filter-open') === '1'; } catch { return false; }
+  });
+  // spec.scope_filter 外部变化（如 saved-filter 应用、DetailDrawer "应用 scope 筛选"）→ 强制展开
+  useEffect(() => {
+    if (spec.scope_filter && !advOpen) setAdvOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spec.scope_filter]);
+  const toggleAdv = () => {
+    setAdvOpen((v) => {
+      const next = !v;
+      try { localStorage.setItem('lv:adv-filter-open', next ? '1' : '0'); } catch {}
+      return next;
+    });
+  };
+
   return (
     <div className="p-2 border-b bg-white space-y-1">
       <div className="flex items-center gap-1.5 text-sm">
@@ -168,11 +188,19 @@ export function FilterBar() {
           </button>
         ))}
         <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={toggleAdv}
+            className={['ctl', spec.scope_filter ? 'ctl-primary' : ''].join(' ')}
+            title="高级筛选（按字段 + glob/regex；scope 多选用下方 StatsPanel tag 更快）"
+          >
+            {advOpen ? '▾' : '▸'} 高级筛选{spec.scope_filter ? ' ●' : ''}
+          </button>
           <SavedFiltersMenu />
           <ExportMenu />
         </div>
       </div>
 
+      {advOpen && (
       <div className="flex items-center gap-1.5 text-sm">
         <span className="text-slate-500">Scope：</span>
         <input
@@ -222,6 +250,7 @@ export function FilterBar() {
           ))}
         </div>
       </div>
+      )}
 
       <div className="flex items-center gap-1.5 text-sm">
         <span className="text-slate-500">关键词：</span>

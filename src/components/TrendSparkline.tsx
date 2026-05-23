@@ -252,18 +252,20 @@ export function TrendSparkline() {
         </ResponsiveContainer>
       </div>
 
-      {/* 选区可视层 — 全部 pointer-events-none（避免遮挡 Tooltip）；mousedown 由外层处理 */}
+      {/* 选区可视层 — 全部 pointer-events-none；只用 dim 表示选区边界，不画外框 */}
       {display && (
         <div className="absolute inset-0 pointer-events-none">
           {/* 左侧 dim */}
           <div className="absolute top-0 bottom-0 left-0 bg-white/55" style={{ width: leftPct }} />
           {/* 右侧 dim */}
           <div className="absolute top-0 bottom-0 right-0 bg-white/55" style={{ width: `calc(100% - ${leftPct} - ${widthPct})` }} />
-          {/* 选区描边 + 浅蓝填充 */}
-          <div
-            className="absolute top-0 bottom-0 border-l-2 border-r-2 border-blue-500"
-            style={{ left: leftPct, width: widthPct, background: 'rgba(59,130,246,0.06)' }}
-          />
+          {/* 拖动中显示更清晰的边界细线（仅 dragging 时，便于看准 boundary） */}
+          {dragging && (
+            <>
+              <div className="absolute top-0 bottom-0 w-px bg-blue-400/70" style={{ left: leftPct }} />
+              <div className="absolute top-0 bottom-0 w-px bg-blue-400/70" style={{ left: `calc(${leftPct} + ${widthPct} - 1px)` }} />
+            </>
+          )}
         </div>
       )}
       {/* 拖动中浮提示 */}

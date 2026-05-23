@@ -1,0 +1,717 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Log Viewer — UI v2 · Terminal Dark</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-0: #0a0e14;     /* 主背景 — 接近纯黑带蓝灰 */
+    --bg-1: #0f141b;     /* 次级表面：FilterBar / Footer */
+    --bg-2: #151b24;     /* 浮起表面：Drawer / Modal / hover */
+    --bg-3: #1d2632;     /* hover / selected base */
+    --line:  #1f2937;    /* 几乎不可见的分隔线 */
+    --line-2:#2a3441;
+    --txt-1: #e6edf3;    /* 主文字 */
+    --txt-2: #9ba8b8;    /* 次级文字 */
+    --txt-3: #5a6878;    /* 三级 / 占位 */
+    --txt-4: #3d4654;    /* 极弱 / disabled */
+    --cy:    #22d3ee;    /* accent: cyan */
+    --cy-dim:#0e7490;
+    --cy-bg: rgba(34,211,238,0.08);
+    --hl:    #facc15;    /* 高亮 mark */
+    --hl-bg: rgba(250,204,21,0.18);
+    /* level */
+    --lv-error: #f87171;
+    --lv-warn:  #fbbf24;
+    --lv-info:  #60a5fa;
+    --lv-debug: #67e8f9;
+    --lv-trace: #94a3b8;
+    --lv-unk:   #6b7280;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    background: var(--bg-0);
+    color: var(--txt-1);
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection { background: var(--cy-bg); color: var(--cy); }
+
+  /* === 工具控件：方形、扁、几乎无圆角 === */
+  .ctl {
+    height: 26px; display: inline-flex; align-items: center; gap: 6px;
+    padding: 0 10px; font-size: 11px; line-height: 1;
+    border: 1px solid var(--line-2); border-radius: 3px;
+    background: var(--bg-1); color: var(--txt-1); cursor: pointer;
+    transition: background-color .1s ease, border-color .1s ease;
+  }
+  .ctl:hover { background: var(--bg-2); border-color: var(--cy-dim); }
+  .ctl-primary { background: var(--cy); color: var(--bg-0); border-color: var(--cy); font-weight: 600; }
+  .ctl-primary:hover { background: #06b6d4; border-color: #06b6d4; }
+  .ctl-ghost { background: transparent; border-color: transparent; }
+  .ctl-ghost:hover { background: var(--bg-2); border-color: var(--line-2); }
+  .ctl-icon { padding: 0 7px; }
+
+  input.input {
+    height: 26px; padding: 0 8px; font-size: 11px; line-height: 1;
+    border: 1px solid var(--line-2); border-radius: 3px;
+    background: var(--bg-0); color: var(--txt-1);
+    font-family: inherit;
+  }
+  input.input:focus { outline: none; border-color: var(--cy); box-shadow: 0 0 0 2px var(--cy-bg); }
+  input.input::placeholder { color: var(--txt-3); }
+
+  /* Level chip — 仅 dot + 文字着色，无 bg */
+  .lvl {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+    padding: 0 6px; height: 22px; border-radius: 3px;
+    background: transparent; border: 1px solid var(--line-2);
+    cursor: pointer;
+  }
+  .lvl:hover { background: var(--bg-2); }
+  .lvl .dot { width: 7px; height: 7px; border-radius: 9999px; flex-shrink: 0; }
+  .lvl.active { border-color: currentColor; background: var(--bg-2); }
+  .lvl.off { color: var(--txt-4); border-color: var(--line); text-decoration: line-through; }
+
+  /* 行 */
+  .row {
+    display: grid;
+    grid-template-columns: 60px 168px 56px 156px 1fr;
+    align-items: center; height: 24px;
+    font-size: 11.5px;
+    border-bottom: 1px solid var(--line);
+    padding: 0 4px;
+    color: var(--txt-1);
+  }
+  .row > * { padding: 0 8px; }
+  .row:hover { background: var(--bg-2); }
+  .row.selected {
+    background: rgba(34,211,238,0.06) !important;
+    border-left: 2px solid var(--cy); padding-left: 2px;
+  }
+  .row.same-trace { background: rgba(34,197,94,0.04) !important; }
+
+  /* highlight mark */
+  mark.hl {
+    background: var(--hl-bg); color: var(--hl); padding: 0 1px; border-radius: 1px;
+    box-shadow: inset 0 -1px 0 var(--hl);
+  }
+
+  /* Sparkline容器 */
+  .spark { height: 48px; position: relative; }
+
+  /* dot pulse */
+  @keyframes ping { 0% { transform: scale(1); opacity: .75; } 75%,100% { transform: scale(2.4); opacity: 0; } }
+  .pulse { position: relative; }
+  .pulse::after { content: ''; position: absolute; inset: 0; border-radius: 9999px; background: currentColor; animation: ping 1.4s infinite; }
+
+  /* scrollbar 深色化 */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a5e; }
+  ::-webkit-scrollbar-track { background: transparent; }
+
+  /* 顶部标尺线 */
+  .accent-bar {
+    height: 2px; background: linear-gradient(90deg, var(--cy) 0%, transparent 60%);
+  }
+
+  /* 命令行 prompt */
+  .prompt::before {
+    content: '$ '; color: var(--cy); margin-right: 2px;
+  }
+</style>
+</head>
+<body class="min-h-screen">
+
+<!-- Designer 顶条 -->
+<div style="background:#1a1f29; border-bottom:1px solid var(--line);" class="px-4 py-1.5 text-[10px] text-[var(--txt-2)] flex items-center gap-3">
+  <span class="text-[var(--cy)] font-bold">[v2 · Terminal Dark]</span>
+  <span class="text-[var(--txt-3)]">|</span>
+  <span>全场 JetBrains Mono · Cyan accent · 22→24px row · 无 bg level chip · iTerm/Warp/Honeycomb 风格</span>
+  <span class="ml-auto text-[var(--txt-3)]">非交互预览 · 仅审视觉</span>
+</div>
+
+<!-- ╔══════════════════════════════════════════════════════ -->
+<!-- 场景 1：主视图                                          -->
+<!-- ╚══════════════════════════════════════════════════════ -->
+<section style="border-bottom: 12px solid var(--bg-2);">
+  <div class="px-4 py-1 text-[10px] uppercase tracking-widest" style="background:var(--bg-2); color:var(--txt-3);">
+    SCENE 01 — Main view
+  </div>
+  <div class="accent-bar"></div>
+
+  <!-- Header -->
+  <header class="flex items-center gap-2 px-3 py-1.5" style="background:var(--bg-1); border-bottom:1px solid var(--line);">
+    <div class="flex items-center gap-1.5 mr-2">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+        <rect x="0" y="0" width="14" height="14" rx="2" fill="#22d3ee"/>
+        <path d="M3 4h3M3 7h6M3 10h4" stroke="#0a0e14" stroke-width="1.4" stroke-linecap="square"/>
+      </svg>
+      <span class="text-[11px] font-semibold tracking-wide" style="color:var(--txt-1)">log</span>
+      <span class="text-[11px]" style="color:var(--txt-3)">/viewer</span>
+    </div>
+
+    <div class="flex">
+      <button class="ctl" style="border-top-right-radius:0; border-bottom-right-radius:0; border-right:0;">📂 open</button>
+      <button class="ctl ctl-icon" style="border-top-left-radius:0; border-bottom-left-radius:0;">▾</button>
+    </div>
+
+    <button class="ctl">
+      <span style="color:var(--txt-3)">tpl:</span>
+      <span style="color:var(--cy)">bracket-electron</span>
+      <span style="color:var(--txt-3)">▾</span>
+    </button>
+
+    <button class="ctl">
+      <span class="dot inline-block w-1.5 h-1.5 rounded-full" style="background:var(--txt-3)"></span>
+      tail
+    </button>
+    <button class="ctl ctl-icon" style="color:var(--txt-3)">🔕</button>
+    <button class="ctl ctl-icon">⚙</button>
+
+    <div class="ml-auto text-[10px]" style="color:var(--txt-3)">
+      <span style="color:var(--txt-4)">~/</span>Library/Logs/ChatKnow/<span style="color:var(--txt-1)">main.log</span>
+    </div>
+  </header>
+
+  <!-- FilterBar Row 1: levels + actions -->
+  <div class="flex items-center gap-1 px-3 py-1.5" style="background:var(--bg-1); border-bottom:1px solid var(--line);">
+    <span class="text-[10px] uppercase tracking-widest mr-1" style="color:var(--txt-3)">levels</span>
+
+    <button class="lvl active" style="color:var(--lv-trace)"><span class="dot" style="background:var(--lv-trace)"></span>trace</button>
+    <button class="lvl active" style="color:var(--lv-debug)"><span class="dot" style="background:var(--lv-debug)"></span>debug</button>
+    <button class="lvl active" style="color:var(--lv-info)"><span class="dot" style="background:var(--lv-info)"></span>info</button>
+    <button class="lvl active" style="color:var(--lv-warn)"><span class="dot" style="background:var(--lv-warn)"></span>warn</button>
+    <button class="lvl active" style="color:var(--lv-error)"><span class="dot" style="background:var(--lv-error)"></span>error</button>
+    <button class="lvl off"><span class="dot" style="background:var(--txt-4)"></span>unknown</button>
+
+    <div class="ml-auto flex items-center gap-1">
+      <button class="ctl ctl-ghost">▸ advanced</button>
+      <button class="ctl ctl-ghost">📌 saved <span style="color:var(--txt-3)">▾</span></button>
+      <button class="ctl ctl-ghost">📥 export <span style="color:var(--txt-3)">▾</span></button>
+    </div>
+  </div>
+
+  <!-- FilterBar Row 2 -->
+  <div class="flex items-center gap-1.5 px-3 py-1.5" style="background:var(--bg-1); border-bottom:1px solid var(--line);">
+    <span class="text-[10px] uppercase tracking-widest" style="color:var(--txt-3)">grep</span>
+    <input class="input flex-1 max-w-md" placeholder="message / raw line search   ⌘F" value="login" />
+    <button class="ctl ctl-ghost text-[10px]" title="regex">.Rx</button>
+
+    <span class="text-[10px] uppercase tracking-widest ml-3" style="color:var(--txt-3)">time</span>
+    <input class="input" style="width:160px;" value="2026-05-22 15:00" />
+    <span style="color:var(--txt-4)">→</span>
+    <input class="input" style="width:160px;" value="2026-05-23 15:00" />
+    <button class="ctl-ghost text-[10px] px-1.5" style="color:var(--txt-3)">×</button>
+  </div>
+
+  <!-- Stats + Sparkline -->
+  <div class="px-3 py-2" style="background:var(--bg-0); border-bottom:1px solid var(--line);">
+    <div class="spark relative">
+      <div class="absolute top-0 left-0 right-0 flex justify-between text-[9px] px-2 leading-none pt-0.5" style="color:var(--txt-3)">
+        <span>05-22 15:00</span><span>21:00</span><span>05-23 03:00</span><span>09:00</span><span>15:00</span>
+      </div>
+      <svg class="absolute top-3 left-2 right-2 bottom-0 w-[calc(100%-16px)]" style="height:34px" viewBox="0 0 1000 34" preserveAspectRatio="none">
+        <!-- info 蓝细线 -->
+        <path d="M0,28 C50,22 100,18 150,20 C200,22 250,16 300,12 C350,10 400,14 450,11 C500,9 550,15 600,8 C650,5 700,11 750,14 C800,17 850,10 900,13 C950,16 1000,18 1000,15" fill="none" stroke="#60a5fa" stroke-width="1" opacity="0.85"/>
+        <!-- warn 橙细线 -->
+        <path d="M0,30 C100,30 200,28 300,30 C400,31 500,29 600,27 C700,26 800,29 900,28 C950,28 1000,29 1000,29" fill="none" stroke="#fbbf24" stroke-width="1" opacity="0.7"/>
+        <!-- error spike 红 -->
+        <path d="M0,32 L300,32 L320,28 L340,21 L360,28 L380,32 L600,32 L620,24 L640,14 L660,22 L680,31 L1000,31" fill="none" stroke="#f87171" stroke-width="1.2"/>
+      </svg>
+    </div>
+    <!-- Scope tags 行（terminal 风格） -->
+    <div class="mt-2 flex items-center gap-1.5 flex-wrap text-[10px]">
+      <span class="text-[10px] uppercase tracking-widest mr-1" style="color:var(--txt-3)">scope</span>
+      <button class="ctl ctl-ghost"><span style="color:var(--txt-1)">main/network-manager</span> <span style="color:var(--txt-3)">128</span></button>
+      <button class="ctl ctl-primary" style="font-weight:500;">✓ app-update <span style="color:rgba(10,14,20,0.7);margin-left:4px">96</span></button>
+      <button class="ctl ctl-ghost"><span style="color:var(--txt-1)">renderer/file-watcher</span> <span style="color:var(--txt-3)">74</span></button>
+      <button class="ctl ctl-ghost"><span style="color:var(--txt-1)">auth.session</span> <span style="color:var(--txt-3)">52</span></button>
+      <button class="ctl ctl-ghost"><span style="color:var(--txt-1)">gost-api</span> <span style="color:var(--txt-3)">41</span></button>
+      <button class="ctl ctl-ghost"><span style="color:var(--txt-1)">ipc.bridge</span> <span style="color:var(--txt-3)">27</span></button>
+      <button class="ctl-ghost text-[10px] underline ml-1" style="color:var(--txt-3)">clear(1)</button>
+    </div>
+  </div>
+
+  <!-- LogList -->
+  <div style="background:var(--bg-0)">
+    <!-- Header -->
+    <div class="row" style="height:22px; background:var(--bg-1); color:var(--txt-3); font-size:10px; text-transform:uppercase; letter-spacing:0.08em; border-bottom:1px solid var(--line-2);">
+      <span class="text-right">line</span>
+      <span>timestamp</span>
+      <span>lvl</span>
+      <span>scope</span>
+      <span class="flex items-center justify-between">
+        <span>message · fields</span>
+        <button style="color:var(--txt-3)">⚙</button>
+      </span>
+    </div>
+
+    <div class="row">
+      <span class="text-right" style="color:var(--txt-3)">1024</span>
+      <span style="color:var(--txt-2)">2026-05-22 15:34:32.520</span>
+      <span style="color:var(--lv-info); font-weight:700">INFO</span>
+      <span style="color:var(--txt-2)" class="truncate">app-update</span>
+      <span class="truncate">checking for update from <mark class="hl">login</mark> service</span>
+    </div>
+    <div class="row">
+      <span class="text-right" style="color:var(--txt-3)">1025</span>
+      <span style="color:var(--txt-2)">2026-05-22 15:34:32.529</span>
+      <span style="color:var(--lv-debug)">DEBUG</span>
+      <span style="color:var(--txt-2)" class="truncate">renderer/file-watcher</span>
+      <span class="truncate">watch added: /Users/kim/Desktop/foo.txt</span>
+    </div>
+    <div class="row">
+      <span class="text-right" style="color:var(--txt-3)">1026</span>
+      <span style="color:var(--txt-2)">2026-05-22 15:34:32.547</span>
+      <span style="color:var(--lv-info); font-weight:700">INFO</span>
+      <span style="color:var(--txt-2)" class="truncate">main/network-manager</span>
+      <span class="truncate">tcp connection established to 10.0.4.18:443</span>
+    </div>
+    <div class="row">
+      <span class="text-right" style="color:var(--txt-3)">1027</span>
+      <span style="color:var(--txt-2)">2026-05-22 15:34:32.561</span>
+      <span style="color:var(--lv-warn); font-weight:700">WARN</span>
+      <span style="color:var(--txt-2)" class="truncate">auth.session</span>
+      <span class="truncate"><mark class="hl">login</mark> rate limit approaching: 4/5 requests in window</span>
+    </div>
+    <div class="row selected">
+      <span class="text-right" style="color:var(--txt-3)">1028</span>
+      <span style="color:var(--txt-2)">2026-05-22 15:34:32.578</span>
+      <span style="color:var(--lv-error); font-weight:700">ERROR</span>
+      <span style="color:var(--txt-2)" class="truncate">auth.session</span>
+      <span class="truncate"><mark class="hl">login</mark> failed: invalid credentials for user_id=u_8821</span>
+    </div>
+    <div class="row">
+      <span class="text-right" style="color:var(--txt-3)">1029</span>
+      <span style="color:var(--txt-2)">2026-05-22 15:34:32.602</span>
+      <span style="color:var(--lv-info); font-weight:700">INFO</span>
+      <span style="color:var(--txt-2)" class="truncate">main/network-manager</span>
+      <span class="truncate">request POST /v1/auth/<mark class="hl">login</mark> → <span style="color:var(--lv-error)">401</span> (28ms)</span>
+    </div>
+    <div class="row">
+      <span class="text-right" style="color:var(--txt-3)">1030</span>
+      <span style="color:var(--txt-2)">2026-05-22 15:34:32.635</span>
+      <span style="color:var(--lv-info); font-weight:700">INFO</span>
+      <span style="color:var(--txt-2)" class="truncate">app-update</span>
+      <span class="truncate">whenReady [ '/Applications/ChatKnow.app/Contents/MacOS/ChatKnow' ]</span>
+    </div>
+    <div class="row">
+      <span class="text-right" style="color:var(--txt-3)">1031–33<span style="color:var(--txt-4)"> ▸3</span></span>
+      <span style="color:var(--txt-2)">2026-05-22 15:34:32.640</span>
+      <span style="color:var(--lv-error); font-weight:700">ERROR</span>
+      <span style="color:var(--txt-2)" class="truncate">renderer</span>
+      <span class="truncate">Uncaught TypeError: Cannot read properties of undefined (reading 'name')</span>
+    </div>
+    <div class="row">
+      <span class="text-right" style="color:var(--txt-3)">1034</span>
+      <span style="color:var(--txt-2)">2026-05-22 15:34:32.711</span>
+      <span style="color:var(--lv-debug)">DEBUG</span>
+      <span style="color:var(--txt-2)" class="truncate">ipc.bridge</span>
+      <span class="truncate">channel "main:nav" handler registered</span>
+    </div>
+    <div class="row">
+      <span class="text-right" style="color:var(--txt-3)">1035</span>
+      <span style="color:var(--txt-2)">2026-05-22 15:34:32.789</span>
+      <span style="color:var(--lv-info); font-weight:700">INFO</span>
+      <span style="color:var(--txt-2)" class="truncate">gost-api</span>
+      <span class="truncate">GET /config → <span style="color:var(--cy)">200</span> status=200 latency_ms=12</span>
+    </div>
+    <div class="row">
+      <span class="text-right" style="color:var(--txt-3)">1036</span>
+      <span style="color:var(--txt-2)">2026-05-22 15:34:32.812</span>
+      <span style="color:var(--lv-trace)">TRACE</span>
+      <span style="color:var(--txt-2)" class="truncate">main/network-manager</span>
+      <span class="truncate">heartbeat sent to ws://relay.local:8443</span>
+    </div>
+    <div class="row">
+      <span class="text-right" style="color:var(--txt-3)">1037</span>
+      <span style="color:var(--txt-2)">2026-05-22 15:34:32.901</span>
+      <span style="color:var(--lv-info); font-weight:700">INFO</span>
+      <span style="color:var(--txt-2)" class="truncate">auth.session</span>
+      <span class="truncate">user u_8821 retry <mark class="hl">login</mark> attempt 2/3</span>
+    </div>
+    <div class="row">
+      <span class="text-right" style="color:var(--txt-3)">1038</span>
+      <span style="color:var(--txt-2)">2026-05-22 15:34:33.024</span>
+      <span style="color:var(--lv-info); font-weight:700">INFO</span>
+      <span style="color:var(--txt-2)" class="truncate">auth.session</span>
+      <span class="truncate"><mark class="hl">login</mark> succeeded: u_8821 (totp verified)</span>
+    </div>
+    <div class="row">
+      <span class="text-right" style="color:var(--txt-3)">1039</span>
+      <span style="color:var(--txt-2)">2026-05-22 15:34:33.117</span>
+      <span style="color:var(--lv-warn); font-weight:700">WARN</span>
+      <span style="color:var(--txt-2)" class="truncate">main/network-manager</span>
+      <span class="truncate">slow request POST /v1/sync → 1284ms (threshold 500ms)</span>
+    </div>
+    <div class="row">
+      <span class="text-right" style="color:var(--txt-3)">1040</span>
+      <span style="color:var(--txt-2)">2026-05-22 15:34:33.241</span>
+      <span style="color:var(--lv-debug)">DEBUG</span>
+      <span style="color:var(--txt-2)" class="truncate">ipc.bridge</span>
+      <span class="truncate">channel "renderer:toast" message="同步完成"</span>
+    </div>
+
+    <!-- Footer prompt 风格 -->
+    <div class="flex items-center gap-3 px-3 py-1 text-[10px] flex-wrap" style="background:var(--bg-1); border-top:1px solid var(--line-2);">
+      <span class="prompt" style="color:var(--txt-1); font-weight:600">matched <span style="color:var(--cy)">12,847</span></span>
+      <span style="color:var(--txt-4)">│</span>
+      <span style="color:var(--lv-error)">ERR 142</span>
+      <span style="color:var(--txt-4)">·</span>
+      <span style="color:var(--lv-warn)">WARN 386</span>
+      <span style="color:var(--txt-4)">·</span>
+      <span style="color:var(--lv-info)">INFO 11,209</span>
+      <span style="color:var(--txt-4)">·</span>
+      <span style="color:var(--lv-debug)">DEBUG 1,089</span>
+      <span style="color:var(--txt-4)">·</span>
+      <span style="color:var(--lv-trace)">TRACE 21</span>
+      <span class="ml-auto" style="color:var(--txt-3)">cache hit <span style="color:var(--cy)">12ms</span></span>
+    </div>
+  </div>
+</section>
+
+<!-- ╔══════════════════════════════════════════════════════ -->
+<!-- 场景 2: Drawer 打开 + tail + same-trace                 -->
+<!-- ╚══════════════════════════════════════════════════════ -->
+<section style="border-bottom: 12px solid var(--bg-2);">
+  <div class="px-4 py-1 text-[10px] uppercase tracking-widest" style="background:var(--bg-2); color:var(--txt-3);">
+    SCENE 02 — Drawer · Tail-follow ON · same-trace tinted green
+  </div>
+  <div class="accent-bar"></div>
+
+  <div class="relative" style="height: 540px;">
+    <!-- 主体 -->
+    <div class="absolute inset-0 flex flex-col">
+      <header class="flex items-center gap-2 px-3 py-1.5" style="background:var(--bg-1); border-bottom:1px solid var(--line);">
+        <div class="flex items-center gap-1.5 mr-2">
+          <svg width="14" height="14" viewBox="0 0 14 14"><rect width="14" height="14" rx="2" fill="#22d3ee"/><path d="M3 4h3M3 7h6M3 10h4" stroke="#0a0e14" stroke-width="1.4" stroke-linecap="square"/></svg>
+          <span class="text-[11px] font-semibold">log</span><span class="text-[11px]" style="color:var(--txt-3)">/viewer</span>
+        </div>
+        <div class="flex"><button class="ctl" style="border-top-right-radius:0;border-bottom-right-radius:0;border-right:0;">📂 open</button><button class="ctl ctl-icon" style="border-top-left-radius:0;border-bottom-left-radius:0;">▾</button></div>
+        <button class="ctl"><span style="color:var(--txt-3)">tpl:</span><span style="color:var(--cy)">bracket-electron</span><span style="color:var(--txt-3)">▾</span></button>
+        <!-- follow ON -->
+        <button class="ctl" style="border-color:#10b981; color:#10b981; background:rgba(16,185,129,0.08);">
+          <span class="dot inline-block w-1.5 h-1.5 rounded-full pulse" style="background:#10b981; color:#10b981;"></span>
+          tail
+        </button>
+        <button class="ctl" style="border-color:var(--lv-warn); color:var(--lv-warn); background:rgba(251,191,36,0.08);">🔔</button>
+        <button class="ctl ctl-icon">⚙</button>
+        <div class="ml-auto text-[10px]" style="color:var(--txt-3)">…ChatKnow/<span style="color:var(--txt-1)">main.log</span></div>
+      </header>
+
+      <!-- Filter Row 1（简化） -->
+      <div class="flex items-center gap-1 px-3 py-1.5" style="background:var(--bg-1); border-bottom:1px solid var(--line);">
+        <span class="text-[10px] uppercase tracking-widest mr-1" style="color:var(--txt-3)">levels</span>
+        <button class="lvl off"><span class="dot" style="background:var(--txt-4)"></span>trace</button>
+        <button class="lvl off"><span class="dot" style="background:var(--txt-4)"></span>debug</button>
+        <button class="lvl active" style="color:var(--lv-info)"><span class="dot" style="background:var(--lv-info)"></span>info</button>
+        <button class="lvl active" style="color:var(--lv-warn)"><span class="dot" style="background:var(--lv-warn)"></span>warn</button>
+        <button class="lvl active" style="color:var(--lv-error)"><span class="dot" style="background:var(--lv-error)"></span>error</button>
+        <button class="lvl off"><span class="dot" style="background:var(--txt-4)"></span>unknown</button>
+        <div class="ml-auto flex items-center gap-1">
+          <button class="ctl ctl-ghost">▸ advanced</button>
+          <button class="ctl ctl-primary">📌 saved ● <span style="margin-left:4px">▾</span></button>
+          <button class="ctl ctl-ghost">📥 export <span style="color:var(--txt-3)">▾</span></button>
+        </div>
+      </div>
+
+      <!-- LogList -->
+      <div class="flex-1 overflow-hidden" style="background:var(--bg-0)">
+        <div class="row" style="height:22px; background:var(--bg-1); color:var(--txt-3); font-size:10px; text-transform:uppercase; letter-spacing:0.08em; border-bottom:1px solid var(--line-2);">
+          <span class="text-right">line</span><span>timestamp</span><span>lvl</span><span>scope</span><span>message · fields</span>
+        </div>
+        <div class="row same-trace">
+          <span class="text-right" style="color:var(--txt-3)">1027</span>
+          <span style="color:var(--txt-2)">…32.561</span>
+          <span style="color:var(--lv-warn); font-weight:700">WARN</span>
+          <span style="color:var(--txt-2)" class="truncate">auth.session</span>
+          <span class="truncate">login rate limit approaching: 4/5 trace_id=<span style="color:#34d399">tr-9f2</span></span>
+        </div>
+        <div class="row selected same-trace">
+          <span class="text-right" style="color:var(--txt-3)">1028</span>
+          <span style="color:var(--txt-2)">…32.578</span>
+          <span style="color:var(--lv-error); font-weight:700">ERROR</span>
+          <span style="color:var(--txt-2)" class="truncate">auth.session</span>
+          <span class="truncate">login failed: invalid credentials for user_id=u_8821 trace_id=<span style="color:#34d399">tr-9f2</span></span>
+        </div>
+        <div class="row same-trace">
+          <span class="text-right" style="color:var(--txt-3)">1029</span>
+          <span style="color:var(--txt-2)">…32.602</span>
+          <span style="color:var(--lv-info); font-weight:700">INFO</span>
+          <span style="color:var(--txt-2)" class="truncate">main/network-manager</span>
+          <span class="truncate">POST /v1/auth/login → <span style="color:var(--lv-error)">401</span> trace_id=<span style="color:#34d399">tr-9f2</span></span>
+        </div>
+        <div class="row">
+          <span class="text-right" style="color:var(--txt-3)">1030</span>
+          <span style="color:var(--txt-2)">…32.635</span>
+          <span style="color:var(--lv-info); font-weight:700">INFO</span>
+          <span style="color:var(--txt-2)" class="truncate">app-update</span>
+          <span class="truncate">whenReady [ '/Applications/ChatKnow.app/...' ]</span>
+        </div>
+        <div class="row">
+          <span class="text-right" style="color:var(--txt-3)">1031–33<span style="color:var(--txt-4)"> ▸3</span></span>
+          <span style="color:var(--txt-2)">…32.640</span>
+          <span style="color:var(--lv-error); font-weight:700">ERROR</span>
+          <span style="color:var(--txt-2)" class="truncate">renderer</span>
+          <span class="truncate">Uncaught TypeError: Cannot read properties of undefined</span>
+        </div>
+        <div class="row same-trace">
+          <span class="text-right" style="color:var(--txt-3)">1037</span>
+          <span style="color:var(--txt-2)">…32.901</span>
+          <span style="color:var(--lv-info); font-weight:700">INFO</span>
+          <span style="color:var(--txt-2)" class="truncate">auth.session</span>
+          <span class="truncate">user u_8821 retry login attempt 2/3 trace_id=<span style="color:#34d399">tr-9f2</span></span>
+        </div>
+        <div class="row same-trace">
+          <span class="text-right" style="color:var(--txt-3)">1038</span>
+          <span style="color:var(--txt-2)">…33.024</span>
+          <span style="color:var(--lv-info); font-weight:700">INFO</span>
+          <span style="color:var(--txt-2)" class="truncate">auth.session</span>
+          <span class="truncate">login succeeded: u_8821 (totp verified) trace_id=<span style="color:#34d399">tr-9f2</span></span>
+        </div>
+        <div class="row">
+          <span class="text-right" style="color:var(--txt-3)">1039</span>
+          <span style="color:var(--txt-2)">…33.117</span>
+          <span style="color:var(--lv-warn); font-weight:700">WARN</span>
+          <span style="color:var(--txt-2)" class="truncate">main/network-manager</span>
+          <span class="truncate">slow request POST /v1/sync → 1284ms</span>
+        </div>
+      </div>
+
+      <!-- 跳底 pill -->
+      <div class="absolute bottom-10 right-[37%]">
+        <button class="px-3 py-1 text-[11px] rounded-full font-semibold" style="background:var(--cy); color:var(--bg-0); box-shadow:0 4px 16px rgba(34,211,238,0.25);">
+          ↓ 3 new logs
+        </button>
+      </div>
+    </div>
+
+    <!-- Drawer -->
+    <aside class="absolute top-0 bottom-0 right-0 w-[36%] min-w-[420px] flex flex-col" style="background:var(--bg-1); border-left:1px solid var(--cy-dim); box-shadow:-8px 0 32px rgba(0,0,0,0.4);">
+      <header class="flex items-center gap-1.5 px-3 py-2" style="border-bottom:1px solid var(--line-2);">
+        <button class="ctl ctl-icon" title="↑">↑</button>
+        <button class="ctl ctl-icon" title="↓">↓</button>
+        <span class="text-[10px] ml-1" style="color:var(--txt-3)"><span style="color:var(--cy)">5</span> / 142 matched</span>
+        <span class="text-[10px] font-semibold ml-3" style="color:var(--txt-1)">entry #1028</span>
+        <button class="ml-auto ctl-ghost text-[12px] px-1.5" style="color:var(--txt-3)">×</button>
+      </header>
+
+      <div class="flex-1 overflow-y-auto p-3 space-y-3 text-[11px]">
+        <!-- key/value grid -->
+        <div class="grid grid-cols-[60px,1fr] gap-x-3 gap-y-1.5">
+          <span style="color:var(--txt-3)">time</span>
+          <span style="color:var(--txt-1)">2026-05-22 15:34:32.578</span>
+          <span style="color:var(--txt-3)">level</span>
+          <span style="color:var(--lv-error); font-weight:700">ERROR</span>
+          <span style="color:var(--txt-3)">scope</span>
+          <span style="color:var(--cy)">auth.session</span>
+          <span style="color:var(--txt-3)">line</span>
+          <span style="color:var(--txt-1)">1028</span>
+        </div>
+
+        <!-- Message block -->
+        <div>
+          <div class="text-[9px] uppercase tracking-widest mb-1" style="color:var(--txt-3)">message</div>
+          <div class="p-2 text-[11px] whitespace-pre-wrap break-words" style="background:var(--bg-0); border:1px solid var(--line-2); border-left:2px solid var(--lv-error);">
+<mark class="hl">login</mark> failed: invalid credentials for user_id=u_8821
+          </div>
+        </div>
+
+        <!-- Fields table -->
+        <div>
+          <div class="text-[9px] uppercase tracking-widest mb-1" style="color:var(--txt-3)">fields <span style="color:var(--txt-4)">(4)</span></div>
+          <div style="border:1px solid var(--line-2);">
+            <div class="flex gap-2 px-2 py-1" style="border-bottom:1px solid var(--line);">
+              <span style="color:var(--txt-3); min-width:84px">user_id</span>
+              <span style="color:var(--txt-1)">u_8821</span>
+            </div>
+            <div class="flex gap-2 px-2 py-1" style="border-bottom:1px solid var(--line);">
+              <span style="color:var(--txt-3); min-width:84px">trace_id</span>
+              <span style="color:#34d399">tr-9f2-aef</span>
+            </div>
+            <div class="flex gap-2 px-2 py-1" style="border-bottom:1px solid var(--line);">
+              <span style="color:var(--txt-3); min-width:84px">attempt</span>
+              <span style="color:var(--txt-1)">1</span>
+            </div>
+            <div class="flex gap-2 px-2 py-1">
+              <span style="color:var(--txt-3); min-width:84px">remote_ip</span>
+              <span style="color:var(--txt-1)">10.0.4.18</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Raw -->
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <div class="text-[9px] uppercase tracking-widest" style="color:var(--txt-3)">raw</div>
+            <div class="flex gap-2 text-[10px]">
+              <button style="color:var(--cy)">📋 raw</button>
+              <button style="color:var(--cy)">📋 json</button>
+              <button style="color:var(--cy)">💾 export</button>
+            </div>
+          </div>
+          <div class="p-2 text-[10.5px] whitespace-pre-wrap break-words" style="background:var(--bg-0); border:1px solid var(--line-2);">
+<span style="color:var(--txt-3)">[2026-05-22 15:34:32.578] [error] [auth.session]</span> <mark class="hl">login</mark> failed: invalid credentials for user_id=u_8821 <span style="color:var(--txt-3)">{</span> user_id: 'u_8821', trace_id: 'tr-9f2-aef', attempt: 1, remote_ip: '10.0.4.18' <span style="color:var(--txt-3)">}</span>
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="flex gap-1.5 pt-1">
+          <button class="ctl">→ apply scope filter</button>
+          <button class="ctl">⌖ time ±5min</button>
+        </div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ╔══════════════════════════════════════════════════════ -->
+<!-- 场景 3: Settings                                        -->
+<!-- ╚══════════════════════════════════════════════════════ -->
+<section>
+  <div class="px-4 py-1 text-[10px] uppercase tracking-widest" style="background:var(--bg-2); color:var(--txt-3);">
+    SCENE 03 — Settings ⌘,
+  </div>
+  <div class="accent-bar"></div>
+
+  <div class="relative" style="background:var(--bg-1); height:480px;">
+    <div class="absolute inset-0" style="background:rgba(0,0,0,0.6); backdrop-filter:blur(2px);"></div>
+
+    <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[680px] h-[420px] flex overflow-hidden"
+         style="background:var(--bg-1); border:1px solid var(--cy-dim); box-shadow:0 24px 48px rgba(0,0,0,0.5);">
+      <aside class="w-32 flex flex-col text-[11px]" style="background:var(--bg-2); border-right:1px solid var(--line-2);">
+        <div class="px-3 py-2.5 font-semibold text-[10px] uppercase tracking-widest" style="color:var(--txt-3); border-bottom:1px solid var(--line-2);">settings</div>
+        <button class="px-3 py-2 text-left" style="color:var(--txt-2)">general</button>
+        <button class="px-3 py-2 text-left" style="background:var(--bg-3); color:var(--cy); border-left:2px solid var(--cy); padding-left:10px; font-weight:600">colors</button>
+        <button class="px-3 py-2 text-left" style="color:var(--txt-2)">shortcuts</button>
+        <button class="px-3 py-2 text-left" style="color:var(--txt-2)">templates</button>
+        <div class="mt-auto px-3 py-2 text-[9px]" style="color:var(--txt-4); border-top:1px solid var(--line-2)">applied immediately</div>
+      </aside>
+
+      <section class="flex-1 flex flex-col">
+        <header class="flex items-center justify-between px-4 py-2.5" style="border-bottom:1px solid var(--line-2);">
+          <h3 class="text-[12px] font-semibold uppercase tracking-widest" style="color:var(--txt-1)">colors</h3>
+          <button class="text-[12px]" style="color:var(--txt-3)">×</button>
+        </header>
+        <div class="flex-1 overflow-y-auto p-4 text-[11px] space-y-5">
+          <div>
+            <div class="flex items-baseline gap-2 mb-3">
+              <h4 class="font-medium" style="color:var(--txt-1)">accent</h4>
+              <span class="text-[10px]" style="color:var(--txt-3)">— primary buttons / selection / focus ring</span>
+            </div>
+            <div class="flex gap-2">
+              <button class="flex items-center gap-2 px-2.5 py-1.5 text-[10px]" style="border:1px solid var(--cy); background:var(--bg-2); box-shadow:0 0 0 2px var(--cy-bg)">
+                <span class="w-4 h-4" style="background:#22d3ee"></span> cyan
+              </button>
+              <button class="flex items-center gap-2 px-2.5 py-1.5 text-[10px]" style="border:1px solid var(--line-2); background:var(--bg-0)"><span class="w-4 h-4" style="background:#4f46e5"></span> indigo</button>
+              <button class="flex items-center gap-2 px-2.5 py-1.5 text-[10px]" style="border:1px solid var(--line-2); background:var(--bg-0)"><span class="w-4 h-4" style="background:#a3e635"></span> lime</button>
+              <button class="flex items-center gap-2 px-2.5 py-1.5 text-[10px]" style="border:1px solid var(--line-2); background:var(--bg-0)"><span class="w-4 h-4" style="background:#f472b6"></span> pink</button>
+              <button class="flex items-center gap-2 px-2.5 py-1.5 text-[10px]" style="border:1px solid var(--line-2); background:var(--bg-0)"><span class="w-4 h-4" style="background:#fb923c"></span> orange</button>
+            </div>
+          </div>
+
+          <div>
+            <div class="flex items-baseline gap-2 mb-3">
+              <h4 class="font-medium" style="color:var(--txt-1)">highlight</h4>
+              <span class="text-[10px]" style="color:var(--txt-3)">— matched keyword background</span>
+            </div>
+            <div class="flex gap-2">
+              <button class="flex items-center gap-2 px-2.5 py-1.5 text-[10px]" style="border:1px solid var(--cy); background:var(--bg-2); box-shadow:0 0 0 2px var(--cy-bg)"><span class="w-4 h-4" style="background:#facc15"></span> yellow</button>
+              <button class="flex items-center gap-2 px-2.5 py-1.5 text-[10px]" style="border:1px solid var(--line-2); background:var(--bg-0)"><span class="w-4 h-4" style="background:#34d399"></span> emerald</button>
+              <button class="flex items-center gap-2 px-2.5 py-1.5 text-[10px]" style="border:1px solid var(--line-2); background:var(--bg-0)"><span class="w-4 h-4" style="background:#f472b6"></span> pink</button>
+              <button class="flex items-center gap-2 px-2.5 py-1.5 text-[10px]" style="border:1px solid var(--line-2); background:var(--bg-0)"><span class="w-4 h-4" style="background:#a78bfa"></span> violet</button>
+            </div>
+            <div class="mt-3 text-[10px]" style="color:var(--txt-3)">
+              preview: <mark class="hl">login</mark> failed: invalid credentials
+            </div>
+          </div>
+
+          <div>
+            <div class="flex items-baseline gap-2 mb-3">
+              <h4 class="font-medium" style="color:var(--txt-1)">theme</h4>
+            </div>
+            <div class="flex gap-2">
+              <button class="ctl">☀ light</button>
+              <button class="ctl ctl-primary">🌙 dark</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</section>
+
+<!-- design notes 底部 -->
+<section style="background:var(--bg-1); border-top:1px solid var(--line-2);">
+  <div class="px-6 py-5 max-w-5xl mx-auto text-[11px]" style="color:var(--txt-2)">
+    <h2 class="text-[13px] font-semibold mb-3" style="color:var(--txt-1)">设计说明</h2>
+    <div class="grid grid-cols-2 gap-x-8 gap-y-3">
+      <div>
+        <div class="text-[9px] uppercase tracking-widest mb-1" style="color:var(--txt-3)">视觉锚点</div>
+        <div>iTerm2 / Warp / Sublime Merge / Honeycomb / k9s — terminal native 美学</div>
+      </div>
+      <div>
+        <div class="text-[9px] uppercase tracking-widest mb-1" style="color:var(--txt-3)">字体</div>
+        <div>JetBrains Mono 全场（包括 chrome）— 等宽即风格，无需 sans 切换</div>
+      </div>
+      <div>
+        <div class="text-[9px] uppercase tracking-widest mb-1" style="color:var(--txt-3)">色板</div>
+        <div>BG #0a0e14 (主) / #0f141b (次) / #151b24 (浮) — 三级 surface 层级清晰，无阴影</div>
+      </div>
+      <div>
+        <div class="text-[9px] uppercase tracking-widest mb-1" style="color:var(--txt-3)">主色</div>
+        <div>cyan #22d3ee — terminal accent 经典；不用 blue/indigo 因为太"app"</div>
+      </div>
+      <div>
+        <div class="text-[9px] uppercase tracking-widest mb-1" style="color:var(--txt-3)">level</div>
+        <div>仅 dot 前缀 + 文字着色，无 bg chip — 减少色块视觉噪声</div>
+      </div>
+      <div>
+        <div class="text-[9px] uppercase tracking-widest mb-1" style="color:var(--txt-3)">行高</div>
+        <div>24px (-4)，11.5px 字号 — 单屏多 14% 行数</div>
+      </div>
+      <div>
+        <div class="text-[9px] uppercase tracking-widest mb-1" style="color:var(--txt-3)">圆角</div>
+        <div>3px (ctl) / 0px (modal) — terminal 风格更方</div>
+      </div>
+      <div>
+        <div class="text-[9px] uppercase tracking-widest mb-1" style="color:var(--txt-3)">footer</div>
+        <div>命令行 prompt 风格 <span class="prompt">matched 12,847</span> — 强化"工具感"</div>
+      </div>
+    </div>
+
+    <h3 class="text-[12px] font-semibold mt-5 mb-2" style="color:var(--txt-1)">vs 当前实现：彻底换皮，不是微调</h3>
+    <ul class="space-y-1 list-none">
+      <li>· 主体配色从浅 → 深，几乎所有 surface 颜色重写</li>
+      <li>· 字体从 system sans → JetBrains Mono 全场</li>
+      <li>· level chip 从 bg-color → dot + text-color，去除色块</li>
+      <li>· 控件 hover 从 slate-50 → bg-2 + cyan 边框</li>
+      <li>· footer 从普通文本 → terminal prompt 风格</li>
+      <li>· drawer 从白底阴影 → 深底 + 1px cyan-dim 左边框 + 黑色 outer shadow</li>
+      <li>· Sparkline 从堆叠 area → 细线 stroke (无填充)，避免色块在暗底过重</li>
+      <li>· 标题 chrome 加 <code>log/viewer</code> 文本（无显式 logo 文字）— 路径式命名</li>
+    </ul>
+
+    <h3 class="text-[12px] font-semibold mt-5 mb-2" style="color:var(--txt-1)">如果走这条路，还可以做：</h3>
+    <ul class="space-y-1 list-none" style="color:var(--txt-3)">
+      <li>· 列表行 hover 时左侧出现 <code>›</code> 指针（鼠标位置）</li>
+      <li>· 行末状态字段（如 HTTP 200/401）按值自动 colorize（cyan = 2xx，warn = 4xx，error = 5xx）</li>
+      <li>· tab title 显示 <code>● main.log · 12.8k matched</code>（带状态点）</li>
+      <li>· 加 vim-style <code>:</code> 命令面板（可选）</li>
+    </ul>
+  </div>
+</section>
+
+</body>
+</html>
+

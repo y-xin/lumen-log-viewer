@@ -11,6 +11,10 @@
 - JSON Lines 容忍 grep/tail 多文件拼接产生的前缀（`filename.log:{...}`）
 - Level 数字格式自动识别：winston/bunyan/pino（10/20/30/40/50）+ ×16 步进（0/16/32/48/64）
 - **Raw 模式 fallback**：嗅探完全 NoMatch 时表格塌成 "行号 + 原始内容" 单列，不强行编造空字段
+- **关键词搜索历史**：localStorage 保留最近 10 个搜索词，输入框 datalist 提示
+- **同 trace 染色**：选中含 trace_id / request_id / session_id 等字段的 entry 时，所有同值行用浅绿背景
+- **桌面通知**：tail-follow 时新 ERROR 触发系统通知（窗口未聚焦才弹），头部 🔔/🔕 toggle 控制
+- **自定义模板编辑 + 导入/导出 JSON**：可改写已有自定义模板；模板管理对话框顶部 ⬆⬇ 跨设备共享
 - 多行 entry 自动合并（如 electron-log 尾部 JSON 跨多行）
 - bracket-electron 同时支持 `[scope]` 和 `(scope)` 两种 scope 写法
 - 按级别 / scope（exact/glob/regex + Top scope 多选）/ 时间区间 / 关键词筛选

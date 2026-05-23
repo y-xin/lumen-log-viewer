@@ -110,3 +110,23 @@ input, textarea, .selectable, [data-selectable] {
   user-select: text;
   -webkit-user-select: text;
 }
+
+/* === react-datepicker：让 wrapper 不撑满 + input 宽度可控 + 颜色对齐 === */
+.lv-dp { display: inline-block; }
+.lv-dp .react-datepicker__input-container { width: 200px; }
+.lv-dp .react-datepicker__input-container input { width: 100%; }
+/* 弹出层 z-index 高于 FilterBar 但低于 modal（z-50） */
+.react-datepicker-popper { z-index: 40 !important; }
+/* 紧凑化 calendar 字号，匹配整体 12px 风格 */
+.react-datepicker { font-size: 12px; }
+.react-datepicker__header { padding-top: 6px; }
+.react-datepicker__current-month { font-size: 12px; font-weight: 600; }
+.react-datepicker__day-name, .react-datepicker__day, .react-datepicker__time-name { width: 1.8rem; line-height: 1.8rem; }
+.react-datepicker__time-container { width: 80px; }
+.react-datepicker__time-container .react-datepicker__time .react-datepicker__time-box { width: 80px; }
+/* 选中区间样式略柔和 */
+.react-datepicker__day--in-range,
+.react-datepicker__day--in-selecting-range { background-color: var(--accent-bg); color: var(--text); }
+.react-datepicker__day--selected,
+.react-datepicker__day--range-start,
+.react-datepicker__day--range-end { background-color: var(--accent); color: #fff; }

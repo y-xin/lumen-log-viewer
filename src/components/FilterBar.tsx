@@ -2,6 +2,8 @@
 // 输入有 150ms debounce，对外通过 useSession 的 patchSpec 暴露
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
 import { useSession } from '../state/session';
 import type { LogLevel, MatchMode } from '../types/log';
 import { ExportMenu } from './ExportMenu';
@@ -18,19 +20,14 @@ const LEVEL_COLOR: Record<LogLevel, string> = {
   unknown: 'bg-slate-100 text-slate-500',
 };
 
-// datetime-local 控件要求 'YYYY-MM-DDTHH:mm' 本地时区格式，但 spec.time_range 存 ISO（UTC）。
-// 这两个 helper 只在 UI 边界做格式转换，state/spec 仍统一 ISO。
-function isoToLocalInput(iso: string): string {
-  if (!iso) return '';
+// react-datepicker 用 Date 对象，spec.time_range 存 ISO；只在 UI 边界做转换
+function isoToDate(iso: string): Date | null {
+  if (!iso) return null;
   const d = new Date(iso);
-  if (isNaN(d.getTime())) return '';
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return isNaN(d.getTime()) ? null : d;
 }
-function localInputToIso(local: string): string {
-  if (!local) return '';
-  const d = new Date(local);
-  return isNaN(d.getTime()) ? '' : d.toISOString();
+function dateToIso(d: Date | null): string {
+  return d ? d.toISOString() : '';
 }
 
 export function FilterBar() {
@@ -249,20 +246,37 @@ export function FilterBar() {
           title={keywordMode === 'regex' ? '当前 regex 模式（点切换为 substring）' : '当前 substring 模式（点切换为 regex）'}
         >.Rx</button>
         <span className="text-slate-500 ml-2">时间：</span>
-        <input
-          type="datetime-local"
-          value={isoToLocalInput(from)}
-          onChange={(e) => setFrom(localInputToIso(e.target.value))}
+        <DatePicker
+          selected={isoToDate(from)}
+          onChange={(d: Date | null) => setFrom(dateToIso(d))}
+          selectsStart
+          startDate={isoToDate(from) ?? undefined}
+          endDate={isoToDate(to) ?? undefined}
+          showTimeSelect
+          timeFormat="HH:mm"
+          timeIntervals={5}
+          dateFormat="yyyy-MM-dd HH:mm"
+          placeholderText="开始时间"
           className="input-ctl text-[11px]"
-          style={{ width: 180 }}
+          wrapperClassName="lv-dp"
+          isClearable={false}
         />
         <span className="text-slate-400">~</span>
-        <input
-          type="datetime-local"
-          value={isoToLocalInput(to)}
-          onChange={(e) => setTo(localInputToIso(e.target.value))}
+        <DatePicker
+          selected={isoToDate(to)}
+          onChange={(d: Date | null) => setTo(dateToIso(d))}
+          selectsEnd
+          startDate={isoToDate(from) ?? undefined}
+          endDate={isoToDate(to) ?? undefined}
+          minDate={isoToDate(from) ?? undefined}
+          showTimeSelect
+          timeFormat="HH:mm"
+          timeIntervals={5}
+          dateFormat="yyyy-MM-dd HH:mm"
+          placeholderText="结束时间"
           className="input-ctl text-[11px]"
-          style={{ width: 180 }}
+          wrapperClassName="lv-dp"
+          isClearable={false}
         />
         {(from || to) && (
           <button

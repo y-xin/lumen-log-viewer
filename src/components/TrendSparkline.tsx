@@ -84,8 +84,9 @@ interface Selection { start: number; end: number; }
 
 const HANDLE_HIT_PX = 10;
 const TICK_COUNT = 5;
-const TOP_AXIS_H = 16;
+const TOP_AXIS_H = 12;        // 紧凑：原 16
 const CHART_TOP = TOP_AXIS_H + 2;
+const CONTAINER_H = 72;       // 紧凑：原 110
 
 export function TrendSparkline() {
   const { result, patchSpec, spec } = useSession();
@@ -224,13 +225,13 @@ export function TrendSparkline() {
     <div
       ref={containerRef}
       className="w-full relative select-none"
-      style={{ height: 110, cursor: dragging ? (dragging.mode === 'move' ? 'grabbing' : 'col-resize') : 'crosshair' }}
+      style={{ height: CONTAINER_H, cursor: dragging ? (dragging.mode === 'move' ? 'grabbing' : 'col-resize') : 'crosshair' }}
       onMouseDown={onMouseDown}
       onDoubleClick={onDoubleClick}
       title={display ? '拖两侧把手调整 / 拖中间平移 / 双击清除' : '拖选时间区间 · hover 查看每桶详情'}
     >
-      {/* 时间 tick 轴 */}
-      <div className="absolute top-0 left-0 right-0 flex justify-between text-[10px] text-slate-400 px-2 pointer-events-none" style={{ height: TOP_AXIS_H }}>
+      {/* 时间 tick 轴（紧凑：9px 字号） */}
+      <div className="absolute top-0 left-0 right-0 flex justify-between text-[9px] leading-none text-slate-400 px-2 pointer-events-none" style={{ height: TOP_AXIS_H, paddingTop: 1 }}>
         {ticks.map((t, i) => (
           <span key={i}>{fmtShort(t.ts)}</span>
         ))}

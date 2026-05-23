@@ -264,6 +264,15 @@ export function FilterBar() {
           className="input-ctl text-[11px]"
           style={{ width: 180 }}
         />
+        {(from || to) && (
+          <button
+            onClick={() => { setFrom(''); setTo(''); }}
+            className="text-slate-400 hover:text-slate-700 text-xs leading-none px-1"
+            title="清除时间区间"
+          >
+            ✕
+          </button>
+        )}
       </div>
     </div>
   );

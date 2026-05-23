@@ -22,11 +22,13 @@ const KEY = 'lv:ui-prefs';
 const DEFAULT: UiPrefs = { theme: 'light', accent: 'blue', highlight: 'yellow' };
 
 // ─── 色板（CSS 值，注入到 :root 的 var） ──────────────────
-export const ACCENT_PALETTE: Record<AccentName, { name: string; main: string; hover: string; bg: string }> = {
-  blue:   { name: '蓝',    main: '#2563eb', hover: '#1d4ed8', bg: '#eff6ff' },
-  violet: { name: '紫',    main: '#7c3aed', hover: '#6d28d9', bg: '#f5f3ff' },
-  teal:   { name: '青',    main: '#0d9488', hover: '#0f766e', bg: '#f0fdfa' },
-  rose:   { name: '玫红',  main: '#e11d48', hover: '#be123c', bg: '#fff1f2' },
+// bg: 亮色模式选中态浅底（蓝 50 / 紫 50 …）
+// bgDark: 暗色模式选中态 — 半透明 accent，叠在 surface 上既不发白也不糊
+export const ACCENT_PALETTE: Record<AccentName, { name: string; main: string; hover: string; bg: string; bgDark: string }> = {
+  blue:   { name: '蓝',    main: '#2563eb', hover: '#1d4ed8', bg: '#eff6ff', bgDark: 'rgba(37,99,235,0.22)' },
+  violet: { name: '紫',    main: '#7c3aed', hover: '#6d28d9', bg: '#f5f3ff', bgDark: 'rgba(124,58,237,0.22)' },
+  teal:   { name: '青',    main: '#0d9488', hover: '#0f766e', bg: '#f0fdfa', bgDark: 'rgba(13,148,136,0.24)' },
+  rose:   { name: '玫红',  main: '#e11d48', hover: '#be123c', bg: '#fff1f2', bgDark: 'rgba(225,29,72,0.22)' },
 };
 
 export const HIGHLIGHT_PALETTE: Record<HighlightName, { name: string; bg: string; text: string }> = {
@@ -63,7 +65,8 @@ export function applyUiPrefs(p: UiPrefs): void {
   const h = HIGHLIGHT_PALETTE[p.highlight];
   root.style.setProperty('--accent',       a.main);
   root.style.setProperty('--accent-hover', a.hover);
-  root.style.setProperty('--accent-bg',    a.bg);
+  // dark 走半透明 accent —— 避免浅色蓝 50 在暗底发白
+  root.style.setProperty('--accent-bg',    p.theme === 'dark' ? a.bgDark : a.bg);
   root.style.setProperty('--hl-bg',        h.bg);
   root.style.setProperty('--hl-text',      h.text);
 }

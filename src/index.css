@@ -25,6 +25,9 @@
 }
 
 /* === Dark 主题（实验性 — 仅切根 BG / 文本 / 边框；level/scope/highlight 仍用色板） === */
+/* 注：--accent / --accent-hover / --accent-bg 不在此处覆盖 — 它们由 uiPrefs.applyUiPrefs
+   在运行时以 inline style 注入 :root，inline 优先级高于 selector，写在这里也会被覆盖；
+   dark 下的 accent-bg（半透明 accent）已由 applyUiPrefs 按 theme 切换 a.bg / a.bgDark 实现 */
 :root[data-theme="dark"] {
   --bg: #0f172a;
   --surface: #1e293b;
@@ -33,7 +36,6 @@
   --text: #f1f5f9;
   --text-2: #cbd5e1;
   --text-3: #94a3b8;
-  --accent-bg: #1e3a8a;
 }
 :root[data-theme="dark"] body { background: var(--bg); color: var(--text); }
 :root[data-theme="dark"] .ctl,

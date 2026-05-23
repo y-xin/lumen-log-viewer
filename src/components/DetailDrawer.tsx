@@ -130,7 +130,7 @@ export function DetailDrawer() {
       </header>
       <div className="flex-1 overflow-y-auto p-4 space-y-4 text-sm selectable">
         <section className="grid grid-cols-2 gap-2 text-xs">
-          <Field label="时间" value={entry.timestamp ?? '-'} />
+          <Field label="时间" value={entry.timestamp ? entry.timestamp.replace('T',' ').replace(/Z$/,'').replace(/([+-]\d{2}:?\d{2})$/,'').replace(/(\.\d{3})\d+$/,'$1') : '-'} />
           <Field label="级别" value={entry.level.toUpperCase()} />
           <Field label="Scope" value={entry.scope ?? '-'} />
           <Field label="行号" value={lineLabel} />

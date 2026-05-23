@@ -71,6 +71,18 @@ function restOfRaw(raw: string): string {
   return raw.slice(i + 1);
 }
 
+// 时间列显示：把后端给的 ISO（如 "2026-05-22T15:34:32.529Z"）改成
+// "2026-05-22 15:34:32.529" — 直接字符串处理，不走 Date 对象避免本地时区漂移
+// （日志的 wall-clock 通常就是写日志时的本地时间，多数用户想看的也是原始字面值）
+function fmtRowTime(iso: string | null | undefined): string {
+  if (!iso) return '-';
+  return iso
+    .replace('T', ' ')
+    .replace(/Z$/, '')
+    .replace(/([+-]\d{2}:?\d{2})$/, '')      // 剥时区偏移（如 +08:00）
+    .replace(/(\.\d{3})\d+$/, '$1');         // 微秒/纳秒截到毫秒
+}
+
 // 用 spec 的 JSON 字符串作为"会话指纹" — 文件变 / spec 变 → 指纹变 → 重置 entries。
 // 单纯 follow append 时（result 引用换了但 spec 没变 + total_matched 增大）→ 保留已加载的 entries 防止闪烁。
 function specKey(s: unknown): string {
@@ -402,7 +414,7 @@ export function LogList() {
           )}
           {visibility.time && (
             <span style={{ width: widths.time }} className="flex items-center text-slate-500 truncate px-2">
-              {e.timestamp ?? '-'}
+              {fmtRowTime(e.timestamp)}
             </span>
           )}
           {visibility.level && (

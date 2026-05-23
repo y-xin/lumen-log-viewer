@@ -85,6 +85,19 @@ export function LogList() {
   // Raw 模式：嗅探完全 NoMatch 时，列表退化为 "行号 + 原始内容" 单列展示
   // 隐藏 time / level / scope 列以及 ⚙ 菜单（在该模式下没意义）
   const rawMode = metadata?.sniff_kind === 'NoMatch';
+
+  // 同 trace 染色：选中 entry 后，找 fields 里 trace 类字段，所有同值行染浅绿
+  // 选 fields 的优先级：trace_id > traceId > trace-id > request_id > requestId > session_id > sessionId
+  const TRACE_FIELD_CANDIDATES = ['trace_id', 'traceId', 'trace-id', 'request_id', 'requestId', 'request-id', 'session_id', 'sessionId'];
+  const traceContext = (() => {
+    if (!selectedEntry) return null;
+    const f = selectedEntry.fields ?? {};
+    for (const key of TRACE_FIELD_CANDIDATES) {
+      const v = f[key];
+      if (typeof v === 'string' && v.length > 0) return { key, value: v };
+    }
+    return null;
+  })();
   const [entries, setEntries] = useState<(LogEntry | undefined)[]>([]);
   const pendingPages = useRef<Set<number>>(new Set());
   const seq = useRef(0);
@@ -329,6 +342,8 @@ export function LogList() {
     const isSelected = selectedEntry?.line_no === e.line_no;
     const isMultiline = e.line_count > 1;
     const isExpanded = isMultiline && expanded.has(e.line_no);
+    // 同 trace 染色：非选中行 + 当前 entry 的 trace 字段值与 selectedEntry 同
+    const inSameTrace = !isSelected && !!traceContext && e.fields?.[traceContext.key] === traceContext.value;
     const fieldsTxt = formatFields(e.fields);
     const messageTxt = e.message || e.raw;
     const combined = fieldsTxt ? `${messageTxt}    ${fieldsTxt}` : messageTxt;
@@ -355,7 +370,7 @@ export function LogList() {
           onMouseDown={() => setSelectedEntry(isSelected ? null : e)}
           className={[
             'px-2 flex items-center gap-2 font-mono border-b border-slate-100 cursor-pointer',
-            isSelected ? 'bg-blue-50' : 'hover:bg-slate-50',
+            isSelected ? 'bg-blue-50' : (inSameTrace ? 'bg-emerald-50' : 'hover:bg-slate-50'),
           ].join(' ')}
         >
           <span className="text-slate-400 text-right pr-2 shrink-0" style={{ minWidth: 56 }}>
@@ -376,7 +391,7 @@ export function LogList() {
         onMouseDown={() => setSelectedEntry(isSelected ? null : e)}
         className={[
           'flex flex-col font-mono border-b border-slate-100 cursor-pointer',
-          isSelected ? 'bg-blue-50' : 'hover:bg-slate-50',
+          isSelected ? 'bg-blue-50' : (inSameTrace ? 'bg-emerald-50' : 'hover:bg-slate-50'),
         ].join(' ')}
       >
         <div className="px-2 flex items-stretch gap-0" style={{ height: ROW_HEIGHT }}>

@@ -6,6 +6,7 @@ import { useSession } from '../state/session';
 import type { LogLevel, MatchMode } from '../types/log';
 import { ExportMenu } from './ExportMenu';
 import { SavedFiltersMenu } from './SavedFiltersMenu';
+import { getSearchHistory, pushSearchHistory } from '../lib/searchHistory';
 
 const LEVELS: LogLevel[] = ['trace', 'debug', 'info', 'warn', 'error', 'unknown'];
 const LEVEL_COLOR: Record<LogLevel, string> = {
@@ -58,6 +59,17 @@ export function FilterBar() {
     }), 150);
     return () => clearTimeout(t);
   }, [keyword, keywordMode, patchSpec]);
+
+  // 搜索历史：长度 >= 3 + 停手 1s 后才记入（避免每个字符都写盘 + 太短噪音）
+  useEffect(() => {
+    if (!keyword || keyword.length < 3) return;
+    const t = setTimeout(() => pushSearchHistory(keyword), 1000);
+    return () => clearTimeout(t);
+  }, [keyword]);
+  const [historyTick, setHistoryTick] = useState(0);
+  const searchHistory = useMemo(() => getSearchHistory(), [historyTick]);
+  // input 聚焦时刷新一次 history（拿到本会话其他写入）
+  const onKeywordFocus = () => setHistoryTick((n) => n + 1);
 
   // debounce scope 三联：local 输入 → 写入 store
   useEffect(() => {
@@ -220,10 +232,17 @@ export function FilterBar() {
           ref={keywordRef}
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
+          onFocus={onKeywordFocus}
           placeholder={keywordMode === 'regex' ? '正则（大小写不敏感）' : '在 message / 原始行中搜索'}
           className={['input-ctl flex-1 max-w-md', keywordRegexInvalid ? 'border-red-400' : ''].join(' ')}
           title={keywordRegexInvalid ? '正则语法非法（已被忽略）' : ''}
+          list={searchHistory.length > 0 ? 'lv-search-history' : undefined}
         />
+        {searchHistory.length > 0 && (
+          <datalist id="lv-search-history">
+            {searchHistory.map((h) => <option key={h} value={h} />)}
+          </datalist>
+        )}
         <button
           onClick={() => setKeywordMode((m) => (m === 'regex' ? 'substring' : 'regex'))}
           className={['ctl', keywordMode === 'regex' ? 'ctl-primary' : ''].join(' ')}

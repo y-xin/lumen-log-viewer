@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "log-viewer",
+  "productName": "Lumen",
   "version": "0.1.0",
   "identifier": "dev.local.log-viewer",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "log-viewer",
+        "title": "Lumen · 日志查看与分析",
         "width": 1280,
         "height": 800,
         "dragDropEnabled": true

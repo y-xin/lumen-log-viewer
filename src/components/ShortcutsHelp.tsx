@@ -41,7 +41,7 @@ export function ShortcutsHelp() {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold">键盘快捷键</h3>
+          <h3 className="text-sm font-semibold">Lumen · 键盘快捷键</h3>
           <button onClick={() => setHelpOpen(false)} className="text-slate-400 hover:text-slate-700" title="关闭 (Esc)">
             ✕
           </button>

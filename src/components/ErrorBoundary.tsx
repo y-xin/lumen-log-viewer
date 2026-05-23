@@ -40,7 +40,7 @@ export class ErrorBoundary extends Component<Props, State> {
     return (
       <div className="fixed inset-0 z-50 bg-slate-50 flex items-center justify-center p-6 overflow-auto">
         <div className="bg-white border border-red-200 rounded shadow-lg max-w-2xl w-full p-6">
-          <h2 className="text-base font-semibold text-red-700 mb-2">应用崩溃</h2>
+          <h2 className="text-base font-semibold text-red-700 mb-2">Lumen 崩溃</h2>
           <p className="text-sm text-slate-600 mb-3">渲染出了未捕获的异常。可以尝试恢复或重新加载。</p>
           {error && (
             <div className="bg-red-50 border border-red-200 rounded p-2 mb-3 text-xs font-mono text-red-800 break-all">

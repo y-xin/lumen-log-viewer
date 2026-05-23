@@ -55,7 +55,10 @@ export default function App() {
   return (
     <div className="h-screen flex flex-col bg-slate-50 text-slate-900">
       <header className="flex items-center gap-3 px-4 py-2 border-b bg-white">
-        <h1 className="text-base font-semibold">Log Viewer</h1>
+        <h1 className="text-base font-semibold flex items-baseline gap-1.5">
+          <span>Lumen</span>
+          <span className="text-[11px] font-normal text-slate-400">日志查看</span>
+        </h1>
         <OpenFileMenu />
         {metadata && <TemplateMenu onOpenManager={() => setShowManager(true)} />}
         {metadata && <FollowToggle />}

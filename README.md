@@ -1,6 +1,8 @@
-# Log Viewer
+# Lumen — 日志查看与分析
 
-桌面 GUI 日志查看与分析工具（Tauri + React + TypeScript）。
+> See through your logs.
+
+桌面 GUI 日志查看与分析工具（Tauri + React + TypeScript）。代号 `log-viewer`，发布名 **Lumen**。
 
 ## 当前状态：Plan 2b + Export + Style v3 + Saved Filters + Shortcuts + Detail Nav + Overnight (13 features) 已完成
 

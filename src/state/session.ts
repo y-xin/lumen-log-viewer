@@ -20,6 +20,8 @@ interface SessionStore {
   selectedEntry: LogEntry | null;
 
   follow: boolean;
+  /** tail-follow 时新 error 是否触发桌面通知（仅当窗口未聚焦时） */
+  notifyOnError: boolean;
   rotationKind: string | null;
   newEntriesPending: number;
   /** 快捷键 help overlay 是否打开 */
@@ -45,6 +47,7 @@ interface SessionStore {
   setSelectedEntry: (e: LogEntry | null) => void;
 
   setFollow: (b: boolean) => void;
+  setNotifyOnError: (b: boolean) => void;
   setRotationKind: (k: string | null) => void;
   appendEntries: (entries: LogEntry[], total: number) => void;
   clearNewEntriesPending: () => void;
@@ -64,6 +67,7 @@ export const useSession = create<SessionStore>((set) => ({
   selectedEntry: null,
 
   follow: false,
+  notifyOnError: false,
   rotationKind: null,
   newEntriesPending: 0,
   helpOpen: false,
@@ -103,6 +107,7 @@ export const useSession = create<SessionStore>((set) => ({
   setTemplates: (templates) => set({ templates }),
   setSelectedEntry: (e) => set({ selectedEntry: e }),
   setFollow: (b) => set({ follow: b }),
+  setNotifyOnError: (b) => set({ notifyOnError: b }),
   setRotationKind: (k) => set({ rotationKind: k }),
   /**
    * tail-follow 收到新条目后调用：仅更新 metadata.total（文件原始行数）。

@@ -56,11 +56,29 @@ export function useTailFollow() {
       }, REQUERY_DEBOUNCE_MS);
     };
 
+    const maybeNotifyError = (entries: LogEntry[]) => {
+      if (!useSession.getState().notifyOnError) return;
+      if (typeof document === 'undefined' || document.hasFocus()) return;   // 已聚焦无需通知
+      if (typeof Notification === 'undefined') return;                       // 环境不支持
+      const errors = entries.filter((en) => en.level === 'error').length;
+      if (errors === 0) return;
+      const fire = () => new Notification('Log Viewer · 新 ERROR', {
+        body: `${errors} 条新 error 日志`,
+        tag: 'lv-tail-error',                                                // 同 tag 后续覆盖，不堆叠
+      });
+      if (Notification.permission === 'granted') {
+        try { fire(); } catch { /* ignore */ }
+      } else if (Notification.permission !== 'denied') {
+        Notification.requestPermission().then((p) => { if (p === 'granted') { try { fire(); } catch {} } });
+      }
+    };
+
     const setup = async () => {
       try {
         unsubAppend = await listen<AppendPayload>('entries_appended', (e) => {
           appendEntries(e.payload.entries, e.payload.total);
           scheduleFollowRequery();
+          maybeNotifyError(e.payload.entries);
         });
         unsubRotate = await listen<RotatePayload>('file_rotated', (e) => {
           setRotationKind(e.payload.kind);

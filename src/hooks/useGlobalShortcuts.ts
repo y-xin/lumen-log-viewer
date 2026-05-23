@@ -31,6 +31,7 @@ export function useGlobalShortcuts() {
       if (e.key === 'Escape') {
         if (s.helpOpen) { s.setHelpOpen(false); e.preventDefault(); return; }
         if (s.gotoOpen) { s.setGotoOpen(false); e.preventDefault(); return; }
+        if (s.settingsOpen) { s.setSettingsOpen(false); e.preventDefault(); return; }
         if (s.rotationKind) { s.setRotationKind(null); e.preventDefault(); return; }
         if (s.selectedEntry) { s.setSelectedEntry(null); e.preventDefault(); return; }
         return;
@@ -113,6 +114,10 @@ export function useGlobalShortcuts() {
           return;
         case 'g':
           if (s.metadata) s.setGotoOpen(true);
+          e.preventDefault();
+          return;
+        case ',':
+          s.setSettingsOpen(true);
           e.preventDefault();
           return;
       }

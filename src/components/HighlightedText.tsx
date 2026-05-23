@@ -16,7 +16,11 @@ export function HighlightedText({ text, needle, className }: Props) {
     <span className={className}>
       {spans.map((s, i) =>
         s.hit
-          ? <mark key={i} className="bg-yellow-200 text-slate-900 px-0.5 rounded-sm">{s.text}</mark>
+          ? <mark
+              key={i}
+              className="px-0.5 rounded-sm"
+              style={{ backgroundColor: 'var(--hl-bg)', color: 'var(--hl-text)' }}
+            >{s.text}</mark>
           : <span key={i}>{s.text}</span>
       )}
     </span>

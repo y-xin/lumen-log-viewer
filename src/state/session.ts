@@ -28,6 +28,8 @@ interface SessionStore {
   helpOpen: boolean;
   /** 跳到行号 dialog 是否打开 */
   gotoOpen: boolean;
+  /** 设置面板是否打开 */
+  settingsOpen: boolean;
   /** 日志内容字号（LogList row + DetailDrawer Message/Raw），px */
   fontSize: number;
 
@@ -53,6 +55,7 @@ interface SessionStore {
   clearNewEntriesPending: () => void;
   setHelpOpen: (b: boolean) => void;
   setGotoOpen: (b: boolean) => void;
+  setSettingsOpen: (b: boolean) => void;
   setFontSize: (n: number) => void;
 }
 
@@ -72,6 +75,7 @@ export const useSession = create<SessionStore>((set) => ({
   newEntriesPending: 0,
   helpOpen: false,
   gotoOpen: false,
+  settingsOpen: false,
   fontSize: 12,
 
   loadFile: (m) => set({
@@ -125,5 +129,6 @@ export const useSession = create<SessionStore>((set) => ({
   clearNewEntriesPending: () => set({ newEntriesPending: 0 }),
   setHelpOpen: (helpOpen) => set({ helpOpen }),
   setGotoOpen: (gotoOpen) => set({ gotoOpen }),
+  setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
   setFontSize: (fontSize) => set({ fontSize: Math.min(20, Math.max(10, fontSize)) }),
 }));

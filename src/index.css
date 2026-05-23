@@ -12,13 +12,44 @@
   --text-2: #475569;
   --text-3: #94a3b8;
   --accent: #2563eb;
+  --accent-hover: #1d4ed8;
   --accent-bg: #eff6ff;
+  /* HighlightedText 命中色（运行时 uiPrefs.applyUiPrefs 注入覆盖） */
+  --hl-bg: #fef08a;
+  --hl-text: #0f172a;
 
   --h-control: 28px;
   --h-control-sm: 22px;
   --radius: 5px;
   --radius-sm: 4px;
 }
+
+/* === Dark 主题（实验性 — 仅切根 BG / 文本 / 边框；level/scope/highlight 仍用色板） === */
+:root[data-theme="dark"] {
+  --bg: #0f172a;
+  --surface: #1e293b;
+  --border: #334155;
+  --border-strong: #475569;
+  --text: #f1f5f9;
+  --text-2: #cbd5e1;
+  --text-3: #94a3b8;
+  --accent-bg: #1e3a8a;
+}
+:root[data-theme="dark"] body { background: var(--bg); color: var(--text); }
+:root[data-theme="dark"] .ctl,
+:root[data-theme="dark"] .input-ctl,
+:root[data-theme="dark"] .select-ctl,
+:root[data-theme="dark"] .ctl-segment > button { background: var(--surface); color: var(--text); border-color: var(--border-strong); }
+:root[data-theme="dark"] .ctl:hover,
+:root[data-theme="dark"] .ctl-segment > button:hover { background: #334155; }
+:root[data-theme="dark"] .bg-white { background-color: var(--surface) !important; }
+:root[data-theme="dark"] .bg-slate-50 { background-color: var(--bg) !important; }
+:root[data-theme="dark"] .text-slate-700, :root[data-theme="dark"] .text-slate-800, :root[data-theme="dark"] .text-slate-900 { color: var(--text) !important; }
+:root[data-theme="dark"] .text-slate-500, :root[data-theme="dark"] .text-slate-600 { color: var(--text-2) !important; }
+:root[data-theme="dark"] .text-slate-400 { color: var(--text-3) !important; }
+:root[data-theme="dark"] .border-slate-100, :root[data-theme="dark"] .border-slate-200, :root[data-theme="dark"] .border-slate-300 { border-color: var(--border) !important; }
+:root[data-theme="dark"] .hover\:bg-slate-50:hover, :root[data-theme="dark"] .hover\:bg-slate-100:hover { background-color: #334155 !important; }
+:root[data-theme="dark"] .bg-blue-50 { background-color: var(--accent-bg) !important; }
 
 /* === Utility: 统一 toolbar 控件高度与外观 === */
 .ctl {

@@ -18,12 +18,19 @@ import { useAutoOpenRecent } from './hooks/useAutoOpenRecent';
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
 import { ShortcutsHelp } from './components/ShortcutsHelp';
 import { GotoLineDialog } from './components/GotoLineDialog';
+import { SettingsDialog } from './components/SettingsDialog';
 import { SniffQualityBanner } from './components/SniffQualityBanner';
+import { loadUiPrefs, applyUiPrefs } from './lib/uiPrefs';
 import { useEffect as useEffectInit } from 'react';
 import { getFontSize, saveFontSize } from './api/commands';
 
+// 启动时立即应用 UI 偏好（在 React render 之前生效，避免 light → dark 闪烁）
+applyUiPrefs(loadUiPrefs());
+
 export default function App() {
   const { metadata, loading, error } = useSession();
+  const settingsOpen = useSession((s) => s.settingsOpen);
+  const setSettingsOpen = useSession((s) => s.setSettingsOpen);
   const [showManager, setShowManager] = useState(false);
   useAutoQuery();
   useTailFollow();
@@ -53,6 +60,12 @@ export default function App() {
         {metadata && <TemplateMenu onOpenManager={() => setShowManager(true)} />}
         {metadata && <FollowToggle />}
         {metadata && <NotifyToggle />}
+        <button
+          onClick={() => setSettingsOpen(true)}
+          className="ctl"
+          title="设置 (⌘,)"
+          style={{ marginLeft: 4 }}
+        >⚙</button>
         <div className="ml-auto text-xs text-slate-500 truncate max-w-[50%]" title={metadata?.path}>
           {metadata ? metadata.path : '未打开文件'}
         </div>
@@ -71,6 +84,12 @@ export default function App() {
       )}
 
       {showManager && <TemplateManagerDialog onClose={() => setShowManager(false)} />}
+      {settingsOpen && (
+        <SettingsDialog
+          onClose={() => setSettingsOpen(false)}
+          onOpenTemplateManager={() => setShowManager(true)}
+        />
+      )}
       <DetailDrawer />
       <RotationDialog />
       <ShortcutsHelp />

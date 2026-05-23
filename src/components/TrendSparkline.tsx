@@ -84,9 +84,9 @@ interface Selection { start: number; end: number; }
 
 const HANDLE_HIT_PX = 10;
 const TICK_COUNT = 5;
-const TOP_AXIS_H = 12;        // 紧凑：原 16
-const CHART_TOP = TOP_AXIS_H + 2;
-const CONTAINER_H = 72;       // 紧凑：原 110
+const TOP_AXIS_H = 11;        // 极紧凑：原 16
+const CHART_TOP = TOP_AXIS_H + 1;
+const CONTAINER_H = 50;       // 极紧凑：原 110 → 72 → 50
 
 export function TrendSparkline() {
   const { result, patchSpec, spec } = useSession();

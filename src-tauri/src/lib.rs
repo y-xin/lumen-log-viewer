@@ -2,6 +2,7 @@
 
 pub mod commands;
 pub mod error;
+pub mod remote;
 pub mod export;
 pub mod loader;
 pub mod model;

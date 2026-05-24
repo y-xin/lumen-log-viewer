@@ -166,6 +166,58 @@ impl SshSession {
     pub(crate) fn handle(&self) -> &Handle<ClientHandler> {
         &self.handle
     }
+
+    /// 跑 `tail -n {n} -F {path}`，返回一个 mpsc Receiver 流式接收 stdout chunks
+    pub async fn exec_tail(
+        &self,
+        remote_path: &str,
+        tail_lines: usize,
+    ) -> Result<tokio::sync::mpsc::Receiver<TailEvent>, AppError> {
+        let cmd = format!(
+            "tail -n {} -F {}",
+            tail_lines,
+            shell_escape::unix::escape(remote_path.into()),
+        );
+        let mut channel = self.handle.channel_open_session().await
+            .map_err(|e| AppError::SshNetwork(format!("open channel 失败：{e}")))?;
+        channel.exec(true, cmd.as_bytes()).await
+            .map_err(|e| AppError::SshNetwork(format!("exec 失败：{e}")))?;
+
+        let (tx, rx) = tokio::sync::mpsc::channel(64);
+        tokio::spawn(async move {
+            loop {
+                match channel.wait().await {
+                    Some(russh::ChannelMsg::Data { data }) => {
+                        let s = String::from_utf8_lossy(&data).to_string();
+                        if tx.send(TailEvent::Chunk(s)).await.is_err() { break; }
+                    }
+                    Some(russh::ChannelMsg::ExtendedData { data, ext }) if ext == 1 => {
+                        // stderr — 一般是 tail 的 'has been replaced' 提示
+                        let s = String::from_utf8_lossy(&data).to_string();
+                        let _ = tx.send(TailEvent::Stderr(s)).await;
+                    }
+                    Some(russh::ChannelMsg::Eof) | Some(russh::ChannelMsg::Close) | None => {
+                        let _ = tx.send(TailEvent::Closed).await;
+                        break;
+                    }
+                    _ => {} // 其他消息（如 ExitStatus）忽略
+                }
+            }
+        });
+        Ok(rx)
+    }
+}
+
+// ─── TailEvent ────────────────────────────────────────────────────────────────
+
+#[derive(Debug)]
+pub enum TailEvent {
+    /// 收到一段 stdout 文本
+    Chunk(String),
+    /// 收到 stderr（如 tail 的文件轮换提示）
+    Stderr(String),
+    /// 远端关闭了 channel
+    Closed,
 }
 
 // ─── 生产用 known_hosts 检查 ──────────────────────────────────────────────────

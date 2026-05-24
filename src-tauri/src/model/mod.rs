@@ -86,3 +86,6 @@ mod tests {
         assert_eq!(back.scope.as_deref(), Some("auth"));
     }
 }
+
+pub mod source;
+pub use source::LogSource;

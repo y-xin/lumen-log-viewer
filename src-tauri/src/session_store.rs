@@ -3,18 +3,32 @@
 
 use crate::session::SessionState;
 use dashmap::DashMap;
-use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 #[derive(Default)]
 pub struct SessionStore {
     sessions: DashMap<String, Arc<SessionState>>,
-    path_to_label: DashMap<PathBuf, String>,
+    path_to_label: DashMap<String, String>,  // key = LogSource::to_uri()
+    pending_connections: DashMap<String, PendingConnection>,
 }
 
 impl SessionStore {
     pub fn new() -> Self {
-        Self::default()
+        let store = Self::default();
+        store.start_cleanup_task();
+        store
+    }
+
+    /// 内部启动清理线程：每 2s 扫描过期 pending（clone DashMap Arc，线程 'static safe）
+    fn start_cleanup_task(&self) {
+        let pending = self.pending_connections.clone();
+        std::thread::spawn(move || {
+            loop {
+                std::thread::sleep(std::time::Duration::from_secs(2));
+                let now = std::time::Instant::now();
+                pending.retain(|_, v| now.duration_since(v.created_at).as_secs() < 5);
+            }
+        });
     }
 
     /// 取或新建该 label 的 session（不存在就 default）
@@ -37,43 +51,73 @@ impl SessionStore {
         }
     }
 
-    /// 给 path 登记一个 label（cmd_open_file 成功后调）
-    pub fn register_path(&self, path: PathBuf, label: String) {
-        self.path_to_label.insert(path, label);
+    /// 给 URI 登记一个 label（cmd_open_file 成功后调）
+    pub fn register_path(&self, source_uri: String, label: String) {
+        self.path_to_label.insert(source_uri, label);
     }
 
-    /// 反查：哪个 label 在看这个 path
-    pub fn lookup_by_path(&self, path: &Path) -> Option<String> {
-        self.path_to_label.get(path).map(|r| r.clone())
+    /// 反查：哪个 label 在看这个 URI
+    pub fn lookup_by_uri(&self, uri: &str) -> Option<String> {
+        self.path_to_label.get(uri).map(|v| v.clone())
     }
+
+    /// 存入 pending connection（新窗口 spawn 时缓存，等窗口 mount 后取出）
+    pub fn put_pending(&self, label: String, pending: PendingConnection) {
+        self.pending_connections.insert(label, pending);
+    }
+
+    /// 取出并消费 pending connection
+    pub fn take_pending(&self, label: &str) -> Option<PendingConnection> {
+        self.pending_connections.remove(label).map(|(_, v)| v)
+    }
+
+    /// 清理超过 5 秒未消费的 pending — 由内部 cleanup task 周期调用
+    pub fn sweep_stale_pending(&self) {
+        let now = std::time::Instant::now();
+        self.pending_connections.retain(|_, v| now.duration_since(v.created_at).as_secs() < 5);
+    }
+}
+
+use crate::remote::ssh_session::SshConnectionParams;
+
+#[derive(Debug, Clone)]
+pub struct PendingConnection {
+    pub params: SshConnectionParams,
+    pub path: String,
+    pub tail_lines: usize,
+    pub created_at: std::time::Instant,
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
 
     #[test]
     fn open_then_lookup_hits() {
         let store = SessionStore::new();
         let _s = store.get_or_create("win-1");
-        store.register_path(PathBuf::from("/var/log/a.log"), "win-1".into());
-        assert_eq!(store.lookup_by_path(Path::new("/var/log/a.log")), Some("win-1".into()));
+        let uri = crate::model::LogSource::Local { path: PathBuf::from("/var/log/a.log") }.to_uri();
+        store.register_path(uri.clone(), "win-1".into());
+        assert_eq!(store.lookup_by_uri(&uri), Some("win-1".into()));
     }
 
     #[test]
     fn lookup_unknown_returns_none() {
         let store = SessionStore::new();
-        assert_eq!(store.lookup_by_path(Path::new("/var/log/nope.log")), None);
+        let uri = crate::model::LogSource::Local { path: PathBuf::from("/var/log/nope.log") }.to_uri();
+        assert_eq!(store.lookup_by_uri(&uri), None);
     }
 
     #[test]
     fn close_drops_session_and_path_index() {
         let store = SessionStore::new();
         let _s = store.get_or_create("win-1");
-        store.register_path(PathBuf::from("/var/log/a.log"), "win-1".into());
+        let uri = crate::model::LogSource::Local { path: PathBuf::from("/var/log/a.log") }.to_uri();
+        store.register_path(uri.clone(), "win-1".into());
         store.close("win-1");
         assert!(store.get("win-1").is_none());
-        assert_eq!(store.lookup_by_path(Path::new("/var/log/a.log")), None);
+        assert_eq!(store.lookup_by_uri(&uri), None);
     }
 
     #[test]
@@ -113,5 +157,29 @@ mod tests {
             "win-b operation blocked: {:?}", elapsed);
 
         h1.join().unwrap();
+    }
+
+    #[test]
+    fn pending_put_take_roundtrip() {
+        use crate::remote::ssh_session::{SshConnectionParams, Credential};
+        let store = SessionStore::new();
+        let params = SshConnectionParams {
+            host: "host".into(),
+            port: 22,
+            user: "user".into(),
+            credential: Credential::Password("secret".into()),
+        };
+        let pending = PendingConnection {
+            params,
+            path: "/var/log/app.log".into(),
+            tail_lines: 200,
+            created_at: std::time::Instant::now(),
+        };
+        store.put_pending("win-ssh".into(), pending);
+        let taken = store.take_pending("win-ssh");
+        assert!(taken.is_some());
+        assert_eq!(taken.unwrap().path, "/var/log/app.log");
+        // 第二次 take 应为 None
+        assert!(store.take_pending("win-ssh").is_none());
     }
 }

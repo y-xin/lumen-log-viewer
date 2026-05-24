@@ -2,6 +2,7 @@
 
 pub mod commands;
 pub mod error;
+pub mod remote;
 pub mod export;
 pub mod loader;
 pub mod model;
@@ -97,6 +98,14 @@ pub fn run() {
             commands::cmd_save_ui_prefs,
             commands::cmd_open_in_new_window,
             commands::cmd_open_blank_window,
+            commands::cmd_test_ssh_connection,
+            commands::cmd_open_remote_file,
+            commands::cmd_open_remote_in_new_window,
+            commands::cmd_take_pending_connection,
+            commands::cmd_confirm_host_key,
+            commands::cmd_list_ssh_hosts,
+            commands::cmd_save_ssh_host,
+            commands::cmd_delete_ssh_host,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

@@ -3,6 +3,7 @@
 use crate::error::AppError;
 use crate::loader::reader;
 use crate::loader::{incremental::IncrementalParser, watcher::{FileWatcher, RotationEvent}};
+use crate::session::state::SourceReader;
 use crate::model::{FileMetadata, LogEntry, Stats};
 use crate::parser;
 use crate::parser::registry::Registry;
@@ -13,7 +14,7 @@ use crate::session_store::SessionStore;
 use crate::stats;
 use serde::{Deserialize, Serialize};
 use std::io::{BufWriter, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
 
@@ -78,10 +79,11 @@ pub fn cmd_open_file(
     let session = store.get_or_create(window.label());
     session.load_with_lines(metadata.clone(), entries, lines);
 
-    // 注册路径反向索引（用 canonical 路径，便于 lookup_by_path 命中）
+    // 注册路径反向索引（用 canonical 路径转 URI，便于 lookup_by_uri 命中）
     // canonicalize 失败（如网络盘 / 软链断）时 fallback 原 path，保证聚焦功能能用
-    let path_key = std::fs::canonicalize(&path).unwrap_or_else(|_| std::path::PathBuf::from(&path));
-    store.register_path(path_key, window.label().to_string());
+    let canonical_key = std::fs::canonicalize(&path).unwrap_or_else(|_| PathBuf::from(&path));
+    let uri = crate::model::LogSource::Local { path: canonical_key }.to_uri();
+    store.register_path(uri, window.label().to_string());
 
     // 设置窗口标题
     let title = Path::new(&path).file_name()
@@ -387,7 +389,7 @@ pub fn cmd_start_follow(
     });
 
     let watcher = FileWatcher::start(path, initial, on_append, on_rotation)?;
-    session.install_watcher(watcher, incremental)?;
+    session.install_watcher(SourceReader::File(watcher), incremental)?;
     Ok(())
 }
 
@@ -584,10 +586,11 @@ pub async fn cmd_open_in_new_window(
 
     // 规范化路径（canonicalize 失败时 fallback 原 path，与 cmd_open_file 行为一致）
     let canonical = std::fs::canonicalize(&path)
-        .unwrap_or_else(|_| std::path::PathBuf::from(&path));
+        .unwrap_or_else(|_| PathBuf::from(&path));
+    let uri = crate::model::LogSource::Local { path: canonical.clone() }.to_uri();
 
     // 查反向索引：已打开就聚焦
-    if let Some(existing_label) = store.lookup_by_path(&canonical) {
+    if let Some(existing_label) = store.lookup_by_uri(&uri) {
         if let Some(w) = app.get_webview_window(&existing_label) {
             let _ = w.set_focus();
             return Ok(());
@@ -620,5 +623,233 @@ pub async fn cmd_open_blank_window(app: tauri::AppHandle) -> Result<(), String> 
         .inner_size(1200.0, 800.0)
         .build()
         .map_err(|e| format!("创建窗口失败: {}", e))?;
+    Ok(())
+}
+
+// ─── Multi-Window Remote ───
+
+/// 远程版"在新窗口打开"：同 URI 已有窗口则聚焦，否则 spawn 新窗口并缓存 pending
+#[tauri::command]
+pub async fn cmd_open_remote_in_new_window(
+    app: tauri::AppHandle,
+    store: State<'_, SessionStore>,
+    params: crate::remote::SshConnectionParams,
+    path: String,
+    tail_lines: usize,
+) -> Result<(), AppError> {
+    use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+
+    // 1. 检查同 URI 是否已有窗口 — 有则聚焦，避免重复打开
+    let source = crate::model::LogSource::Remote {
+        host: params.host.clone(),
+        user: params.user.clone(),
+        port: params.port,
+        path: path.clone(),
+    };
+    let uri = source.to_uri();
+    if let Some(existing_label) = store.lookup_by_uri(&uri) {
+        if let Some(w) = app.get_webview_window(&existing_label) {
+            let _ = w.set_focus();
+            return Ok(());
+        }
+        // label 在索引里但窗口已销毁 — 清理后 fallthrough 开新窗
+        store.close(&existing_label);
+    }
+
+    // 2. 生成新窗口 label，缓存 PendingConnection（5s 内自动清理）
+    let new_label = format!("win-{}", uuid::Uuid::new_v4().simple());
+    store.put_pending(new_label.clone(), crate::session_store::PendingConnection {
+        params,
+        path,
+        tail_lines,
+        created_at: std::time::Instant::now(),
+    });
+
+    // 3. 仅将 label 作为 pending key 放入 URL，secret 不进 URL
+    let url = format!("/?pending={new_label}");
+    WebviewWindowBuilder::new(&app, &new_label, WebviewUrl::App(url.into()))
+        .title("Lumen")
+        .inner_size(1200.0, 800.0)
+        .build()
+        .map_err(|e| AppError::Internal(format!("创建窗口失败：{e}")))?;
+
+    Ok(())
+}
+
+/// 新窗口 mount 后调用：取出并消费 PendingConnection，供前端发起真正的 SSH 连接
+#[tauri::command]
+pub async fn cmd_take_pending_connection(
+    window: tauri::Window,
+    store: State<'_, SessionStore>,
+) -> Result<Option<PendingConnectionPayload>, AppError> {
+    Ok(store.take_pending(window.label()).map(Into::into))
+}
+
+#[derive(serde::Serialize)]
+pub struct PendingConnectionPayload {
+    pub params: crate::remote::SshConnectionParams,
+    pub path: String,
+    pub tail_lines: usize,
+}
+
+impl From<crate::session_store::PendingConnection> for PendingConnectionPayload {
+    fn from(p: crate::session_store::PendingConnection) -> Self {
+        Self {
+            params: p.params,
+            path: p.path,
+            tail_lines: p.tail_lines,
+        }
+    }
+}
+
+// ─── Remote SSH ───
+
+#[tauri::command]
+pub async fn cmd_test_ssh_connection(
+    params: crate::remote::ssh_session::SshConnectionParams,
+) -> Result<(), AppError> {
+    crate::remote::ssh_session::SshSession::test_only(
+        &params,
+        crate::remote::ssh_session::default_kh_check(),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn cmd_open_remote_file(
+    window: tauri::Window,
+    app: AppHandle,
+    store: State<'_, SessionStore>,
+    registry: State<'_, Registry>,
+    params: crate::remote::SshConnectionParams,
+    path: String,
+    tail_lines: usize,
+) -> Result<FileMetadata, AppError> {
+    // 1. 创建（或复用）当前 window 的 session
+    let session = store.get_or_create(window.label());
+
+    // 2. 构建 LogSource URI，注册反向索引
+    let source = crate::model::LogSource::Remote {
+        host: params.host.clone(),
+        user: params.user.clone(),
+        port: params.port,
+        path: path.clone(),
+    };
+    let uri = source.to_uri();
+    store.register_path(uri.clone(), window.label().to_string());
+
+    // 3. 构建占位 metadata（远程无本地 inode/size，用空集合填充）
+    let metadata = FileMetadata {
+        path: uri.clone(),
+        total: 0,
+        time_range: None,
+        level_counts: std::collections::HashMap::new(),
+        scopes: vec![],
+        scope_counts: std::collections::HashMap::new(),
+        template_id: "json-lines".to_string(),
+        sniff_kind: Some("remote".to_string()),
+    };
+    session.load_with_lines(metadata.clone(), Vec::new(), Vec::new());
+
+    // 4. 取默认解析模板（json-lines 是内置首个）
+    let tpl_arc = registry.find("json-lines")
+        .ok_or_else(|| AppError::Internal("内置模板 json-lines 未找到".into()))?;
+
+    // 5. 启动 RemoteReader：on_chunk 喂 session.feed_chunk；on_disconnect emit 事件
+    let session_for_chunk = session.clone();
+    let tpl_for_chunk = tpl_arc.clone();
+    let app_for_chunk = app.clone();
+    let label_for_chunk = window.label().to_string();
+
+    let on_chunk: Arc<dyn Fn(String) + Send + Sync> = Arc::new(move |chunk| {
+        if let Ok(new_entries) = session_for_chunk.feed_chunk(tpl_for_chunk.as_parser(), &chunk) {
+            if !new_entries.is_empty() {
+                let total = session_for_chunk.metadata().map(|m| m.total).unwrap_or(0);
+                let _ = app_for_chunk.emit_to(
+                    &label_for_chunk,
+                    "entries_appended",
+                    EntriesAppendedPayload { entries: new_entries, total },
+                );
+            }
+        }
+    });
+
+    let app_for_disc = app.clone();
+    let label_for_disc = window.label().to_string();
+    let on_disc: Arc<dyn Fn(crate::remote::DisconnectReason) + Send + Sync> =
+        Arc::new(move |reason| {
+            use crate::remote::DisconnectReason;
+            let (kind, message, will_retry) = match reason {
+                DisconnectReason::Network(m)  => ("network", m, true),
+                DisconnectReason::Auth(m)     => ("auth", m, false),
+                DisconnectReason::HostKeyChanged => ("host-key-changed", String::new(), false),
+                DisconnectReason::ServerClosed   => ("server-closed", String::new(), true),
+            };
+            let _ = app_for_disc.emit_to(
+                &label_for_disc,
+                "lv:remote-disconnected",
+                serde_json::json!({ "reason": kind, "message": message, "will_retry": will_retry }),
+            );
+        });
+
+    let reader = crate::remote::RemoteReader::start(params, path, tail_lines, on_chunk, on_disc)?;
+
+    // 6. IncrementalParser 起始行号从 1 开始（远程 tail 全新流）
+    let incremental = IncrementalParser::new(1);
+    session.install_watcher(SourceReader::Ssh(reader), incremental)?;
+
+    let _ = app.emit_to(window.label(), "lv:remote-connected", &uri);
+
+    Ok(metadata)
+}
+
+// ── Task 6.4: TOFU 主机密钥确认 ──────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn cmd_confirm_host_key(
+    host: String,
+    port: u16,
+    fingerprint: String,
+    action: String, // "trust" | "session-only"
+) -> Result<(), AppError> {
+    use crate::remote::known_hosts;
+    if action == "trust" {
+        let path = known_hosts::default_path();
+        // MVP 简化：假设 ed25519 key type — 覆盖绝大多数现代 server
+        known_hosts::append(&path, &host, port, "ssh-ed25519", &fingerprint)?;
+    }
+    // "session-only" → 不做事；上层连接逻辑会在本次会话内 bypass kh_check
+    Ok(())
+}
+
+// ── Task 6.5: SSH Hosts CRUD ──────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn cmd_list_ssh_hosts(
+    prefs_store: tauri::State<'_, crate::prefs::PrefsStore>,
+) -> std::collections::HashMap<String, crate::prefs::store::SshHostConfig> {
+    prefs_store.list_ssh_hosts()
+}
+
+#[tauri::command]
+pub fn cmd_save_ssh_host(
+    app: tauri::AppHandle,
+    prefs_store: tauri::State<'_, crate::prefs::PrefsStore>,
+    key: String,
+    cfg: crate::prefs::store::SshHostConfig,
+) -> Result<(), AppError> {
+    prefs_store.save_ssh_host(key, cfg)?;
+    let _ = app.emit("lv:prefs-changed", "ssh_hosts");
+    Ok(())
+}
+
+#[tauri::command]
+pub fn cmd_delete_ssh_host(
+    app: tauri::AppHandle,
+    prefs_store: tauri::State<'_, crate::prefs::PrefsStore>,
+    key: String,
+) -> Result<(), AppError> {
+    prefs_store.delete_ssh_host(&key)?;
+    let _ = app.emit("lv:prefs-changed", "ssh_hosts");
     Ok(())
 }

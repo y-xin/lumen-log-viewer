@@ -17,11 +17,30 @@ pub enum AppError {
 
     #[error("内部错误：{0}")]
     Internal(String),
+
+    #[error("未知主机指纹：{host}:{port} ({fingerprint})")]
+    HostKeyUnknown { host: String, port: u16, fingerprint: String },
+
+    #[error("主机指纹已变化：{host}:{port}（已存 {expected}，实际 {actual}）")]
+    HostKeyMismatch { host: String, port: u16, expected: String, actual: String },
+
+    #[error("SSH 认证失败：{0}")]
+    SshAuthFailed(String),
+
+    #[error("SSH 网络错误：{0}")]
+    SshNetwork(String),
 }
 
 impl From<std::io::Error> for AppError {
     fn from(e: std::io::Error) -> Self {
         AppError::Io(e.to_string())
+    }
+}
+
+// russh::Error → AppError（Handler::Error 关联类型约束必需）
+impl From<russh::Error> for AppError {
+    fn from(e: russh::Error) -> Self {
+        AppError::SshNetwork(e.to_string())
     }
 }
 

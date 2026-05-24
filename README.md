@@ -29,6 +29,7 @@
 - **最近打开文件**：顶部 `▾` 下拉访问最近 10 个文件
 - **拖拽打开**：拖 .log / .jsonl / .txt 文件到窗口任意位置即可打开
 - **多窗口**：每次"打开文件"都是新窗口，同路径自动聚焦已有窗口；⌘N 新建空白；macOS 关到 0 留 dock（⌘Q 通过菜单真退），其他平台关到 0 退出；视觉偏好（主题 / 字号 / accent）与持久化资产（模板 / saved filters / 最近文件）跨窗实时同步
+- **远程日志 (SSH tail)**：通过 SSH 看远程 Linux 服务器日志文件，支持私钥 / 密码认证，known_hosts TOFU，自动退避重连
 - **导出筛选结果**：CSV / JSON Lines / JSON Array 三种格式，FilterBar 右侧 📥 菜单触发
 - **保存筛选器**：按文件路径命名保存常用 level/scope/keyword 组合，FilterBar 右侧 📌 菜单一键调出 / 重命名 / 删除
 - **键盘快捷键**：⌘O 打开 / ⌘N 新窗口 / ⌘R 刷新 / ⌘F 聚焦搜索 / ⌘K 清空筛选 / ⌘T 跟踪 / ⌘E 导出 / ⌘S 筛选器 / ? 帮助 / Esc 关闭
@@ -62,6 +63,43 @@ npm test                       # 前端 vitest
 ## 路径
 
 - 自定义模板 + 保存的筛选器存储：`~/Library/Application Support/log-viewer/prefs.json`（macOS）
+
+## 远程日志（SSH tail）
+
+通过 SSH 在 Lumen 里看远程 Linux 服务器上的日志文件，体验和本地完全一致：解析模板 / 筛选 / saved filters / 详情抽屉 / 跨页跳行全部可用。
+
+### 入口
+
+OpenFileMenu → **🌐 打开远程文件…** → 弹 OpenRemoteDialog 填：
+
+| 字段 | 说明 |
+|---|---|
+| Host / User / Port | 22 默认；可填 IP 或域名 |
+| 远程路径 | 绝对路径，例 `/var/log/nginx/access.log` |
+| 认证 | 私钥 / 密码二选一 |
+| 私钥路径 | 默认填入 `~/.ssh/id_ed25519` |
+| Passphrase | 仅内存；勾选"本次会话记住"可缓存到关窗 |
+| 初始拉取 | 末尾 1k/5k/20k/全部 行 |
+
+### known_hosts TOFU
+
+- 主机已在 `~/.ssh/known_hosts` → 直接连
+- 未知主机 → 弹 HostKeyDialog 显示指纹 → 信任并保存 / 仅本次 / 拒绝
+- 指纹变化 → 拒绝连接（安全红线，需手动改 known_hosts）
+
+### Settings → 远程
+
+管理 host 默认配置（user / 私钥路径 / 上次路径），下次同 host prefill。
+
+### 已知限制（MVP）
+
+- 不支持 ssh-agent / 1Password agent（v2）
+- 不支持 ProxyJump / Bastion host（v2）
+- 不支持 SFTP 远程文件树浏览（v2）
+- 不支持历史反向 backfill（想看更早重连选更大 N）
+- 不支持 Windows 平台
+- 远程 server 假设是 Linux + GNU coreutils 的 `tail -F`
+- `~/.ssh/known_hosts` 中 hashed host entry 不识别（按 TOFU 流程当作 unknown 重新接受）
 
 ## 已知 MVP 限制
 

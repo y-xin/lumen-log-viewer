@@ -56,6 +56,15 @@ pub struct UiPrefs {
     pub highlight: String,  // "" | "yellow" | "emerald" | "pink" | "sky"
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SshHostConfig {
+    pub user: String,
+    pub key_path: std::path::PathBuf,
+    #[serde(default)]
+    pub last_path: Option<String>,
+    // 注意：不存 passphrase / password — 安全红线
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Prefs {
     pub version: u32,
@@ -82,6 +91,9 @@ pub struct Prefs {
     /// UI 视觉偏好（主题/强调色/高亮色），跨窗口实时同步
     #[serde(default)]
     pub ui_prefs: UiPrefs,
+    /// SSH 主机配置：key = "host:port"，value = 连接配置
+    #[serde(default)]
+    pub ssh_hosts: HashMap<String, SshHostConfig>,
 }
 
 const MAX_RECENT_FILES: usize = 10;
@@ -109,7 +121,11 @@ impl PrefsStore {
         }
         match fs::read_to_string(&self.path) {
             Ok(s) => match serde_json::from_str::<Prefs>(&s) {
-                Ok(p) => p,
+                Ok(mut p) => {
+                    // 一次性迁移：旧裸路径 key → file:// URI（幂等：已是 file:// / ssh:// 不变）
+                    Self::migrate_legacy_path_keys(&mut p);
+                    p
+                }
                 Err(_) => {
                     let ts = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
                     let bak = self.path.with_extension(format!("json.bak.{}", ts));
@@ -253,6 +269,25 @@ impl PrefsStore {
         prefs.ui_prefs = ui_prefs;
         self.save(&prefs)
     }
+
+    /// 列出所有 SSH 主机配置
+    pub fn list_ssh_hosts(&self) -> HashMap<String, SshHostConfig> {
+        self.load().ssh_hosts
+    }
+
+    /// 新增或更新一条 SSH 主机配置（key = "host:port"）
+    pub fn save_ssh_host(&self, key: String, cfg: SshHostConfig) -> Result<(), AppError> {
+        let mut p = self.load();
+        p.ssh_hosts.insert(key, cfg);
+        self.save(&p)
+    }
+
+    /// 删除一条 SSH 主机配置（key 不存在时幂等）
+    pub fn delete_ssh_host(&self, key: &str) -> Result<(), AppError> {
+        let mut p = self.load();
+        p.ssh_hosts.remove(key);
+        self.save(&p)
+    }
 }
 
 impl Prefs {
@@ -266,6 +301,36 @@ impl Prefs {
             column_visibility: None,
             font_size: None,
             ui_prefs: UiPrefs::default(),
+            ssh_hosts: HashMap::new(),
+        }
+    }
+}
+
+impl PrefsStore {
+    /// 一次性迁移：旧裸路径 → file:// URI（幂等）
+    pub fn migrate_legacy_path_keys(prefs: &mut Prefs) {
+        // recent_files：String list，每项若不带 scheme 就加 file://
+        for entry in prefs.recent_files.iter_mut() {
+            if !entry.starts_with("file://") && !entry.starts_with("ssh://") {
+                *entry = format!("file://{}", entry);
+            }
+        }
+        // saved_filters：HashMap<String, _> key 同样升级
+        Self::migrate_keys(&mut prefs.saved_filters);
+        // column_widths / column_visibility：Option<HashMap<String, _>>
+        if let Some(m) = &mut prefs.column_widths { Self::migrate_keys(m); }
+        if let Some(m) = &mut prefs.column_visibility { Self::migrate_keys(m); }
+    }
+
+    fn migrate_keys<V>(map: &mut HashMap<String, V>) {
+        let old_keys: Vec<String> = map.keys()
+            .filter(|k| !k.starts_with("file://") && !k.starts_with("ssh://"))
+            .cloned()
+            .collect();
+        for k in old_keys {
+            if let Some(v) = map.remove(&k) {
+                map.insert(format!("file://{k}"), v);
+            }
         }
     }
 }
@@ -344,6 +409,7 @@ mod tests {
             column_visibility: None,
             font_size: None,
             ui_prefs: UiPrefs::default(),
+            ssh_hosts: HashMap::new(),
         };
         store.save(&prefs).unwrap();
         let loaded = store.load();
@@ -355,12 +421,13 @@ mod tests {
     fn record_recent_dedupes_and_moves_to_front() {
         let dir = tempdir().unwrap();
         let store = PrefsStore::at(dir.path().join("prefs.json"));
-        store.record_recent("/a.log").unwrap();
-        store.record_recent("/b.log").unwrap();
-        store.record_recent("/c.log").unwrap();
-        store.record_recent("/a.log").unwrap();   // 再开 /a.log → 移到队首
+        // 用 file:// URI（迁移后存储格式）
+        store.record_recent("file:///a.log").unwrap();
+        store.record_recent("file:///b.log").unwrap();
+        store.record_recent("file:///c.log").unwrap();
+        store.record_recent("file:///a.log").unwrap();   // 再开 /a.log → 移到队首
         let r = store.list_recent();
-        assert_eq!(r, vec!["/a.log".to_string(), "/c.log".to_string(), "/b.log".to_string()]);
+        assert_eq!(r, vec!["file:///a.log".to_string(), "file:///c.log".to_string(), "file:///b.log".to_string()]);
     }
 
     #[test]
@@ -368,12 +435,12 @@ mod tests {
         let dir = tempdir().unwrap();
         let store = PrefsStore::at(dir.path().join("prefs.json"));
         for i in 0..15 {
-            store.record_recent(&format!("/f{}.log", i)).unwrap();
+            store.record_recent(&format!("file:///f{}.log", i)).unwrap();
         }
         let r = store.list_recent();
         assert_eq!(r.len(), MAX_RECENT_FILES);
         // 最新的在前
-        assert_eq!(r[0], "/f14.log");
+        assert_eq!(r[0], "file:///f14.log");
     }
 
     #[test]
@@ -454,10 +521,10 @@ mod tests {
         let dir = tempdir().unwrap();
         let store = PrefsStore::at(dir.path().join("prefs.json"));
         let f = sample_filter("id1", "f1", "2026-05-22T10:00:00Z");
-        let updated = store.save_filter("/a.log", f).unwrap();
+        let updated = store.save_filter("file:///a.log", f).unwrap();
         assert_eq!(updated.len(), 1);
         assert_eq!(updated[0].id, "id1");
-        let listed = store.list_filters("/a.log");
+        let listed = store.list_filters("file:///a.log");
         assert_eq!(listed.len(), 1);
         assert_eq!(listed[0].name, "f1");
     }
@@ -467,10 +534,10 @@ mod tests {
         let dir = tempdir().unwrap();
         let store = PrefsStore::at(dir.path().join("prefs.json"));
         store
-            .save_filter("/a.log", sample_filter("a", "old", "2026-05-22T08:00:00Z"))
+            .save_filter("file:///a.log", sample_filter("a", "old", "2026-05-22T08:00:00Z"))
             .unwrap();
         let v = store
-            .save_filter("/a.log", sample_filter("b", "new", "2026-05-22T10:00:00Z"))
+            .save_filter("file:///a.log", sample_filter("b", "new", "2026-05-22T10:00:00Z"))
             .unwrap();
         assert_eq!(v.len(), 2);
         assert_eq!(v[0].id, "b"); // 新的在前
@@ -482,11 +549,11 @@ mod tests {
         let dir = tempdir().unwrap();
         let store = PrefsStore::at(dir.path().join("prefs.json"));
         store
-            .save_filter("/a.log", sample_filter("keep", "k", "2026-05-22T10:00:00Z"))
+            .save_filter("file:///a.log", sample_filter("keep", "k", "2026-05-22T10:00:00Z"))
             .unwrap();
-        let v = store.delete_filter("/a.log", "doesnotexist").unwrap();
+        let v = store.delete_filter("file:///a.log", "doesnotexist").unwrap();
         assert_eq!(v.len(), 1); // 原条目仍在
-        let v2 = store.delete_filter("/a.log", "keep").unwrap();
+        let v2 = store.delete_filter("file:///a.log", "keep").unwrap();
         assert!(v2.is_empty());
     }
 
@@ -495,12 +562,12 @@ mod tests {
         let dir = tempdir().unwrap();
         let store = PrefsStore::at(dir.path().join("prefs.json"));
         store
-            .save_filter("/a.log", sample_filter("x", "old", "2026-05-22T10:00:00Z"))
+            .save_filter("file:///a.log", sample_filter("x", "old", "2026-05-22T10:00:00Z"))
             .unwrap();
-        let r = store.rename_filter("/a.log", "wrongid", "newname");
+        let r = store.rename_filter("file:///a.log", "wrongid", "newname");
         assert!(matches!(r, Err(AppError::Internal(_))));
         // 原 name 没变
-        let v = store.list_filters("/a.log");
+        let v = store.list_filters("file:///a.log");
         assert_eq!(v[0].name, "old");
     }
 
@@ -509,13 +576,13 @@ mod tests {
         let dir = tempdir().unwrap();
         let store = PrefsStore::at(dir.path().join("prefs.json"));
         store
-            .save_filter("/a.log", sample_filter("a", "fa", "2026-05-22T10:00:00Z"))
+            .save_filter("file:///a.log", sample_filter("a", "fa", "2026-05-22T10:00:00Z"))
             .unwrap();
         store
-            .save_filter("/b.log", sample_filter("b", "fb", "2026-05-22T10:00:00Z"))
+            .save_filter("file:///b.log", sample_filter("b", "fb", "2026-05-22T10:00:00Z"))
             .unwrap();
-        let va = store.list_filters("/a.log");
-        let vb = store.list_filters("/b.log");
+        let va = store.list_filters("file:///a.log");
+        let vb = store.list_filters("file:///b.log");
         assert_eq!(va.len(), 1);
         assert_eq!(vb.len(), 1);
         assert_eq!(va[0].id, "a");
@@ -543,5 +610,38 @@ mod tests {
         std::fs::write(dir.path().join("prefs.json"), legacy_json).unwrap();
         let store = PrefsStore::at(dir.path().join("prefs.json"));
         assert_eq!(store.get_ui_prefs(), UiPrefs::default());
+    }
+
+    #[test]
+    fn migrate_legacy_recent_files_to_file_uri() {
+        let mut prefs = Prefs::default();
+        prefs.recent_files = vec!["/var/log/a".into(), "file:///var/log/b".into()];
+        PrefsStore::migrate_legacy_path_keys(&mut prefs);
+        assert_eq!(prefs.recent_files, vec!["file:///var/log/a", "file:///var/log/b"]);
+    }
+
+    #[test]
+    fn migrate_legacy_saved_filters_keys() {
+        let mut prefs = Prefs::default();
+        prefs.saved_filters.insert("/old/path".into(), vec![]);
+        PrefsStore::migrate_legacy_path_keys(&mut prefs);
+        assert!(prefs.saved_filters.contains_key("file:///old/path"));
+        assert!(!prefs.saved_filters.contains_key("/old/path"));
+    }
+
+    #[test]
+    fn ssh_host_crud_roundtrip() {
+        let tmp = tempdir().unwrap();
+        let store = PrefsStore::at(tmp.path().join("prefs.json"));
+        let cfg = SshHostConfig {
+            user: "kim".into(),
+            key_path: "/Users/kim/.ssh/id_ed25519".into(),
+            last_path: Some("/var/log/app.log".into()),
+        };
+        store.save_ssh_host("prod-1:22".into(), cfg.clone()).unwrap();
+        let all = store.list_ssh_hosts();
+        assert_eq!(all.get("prod-1:22").unwrap().user, "kim");
+        store.delete_ssh_host("prod-1:22").unwrap();
+        assert!(store.list_ssh_hosts().is_empty());
     }
 }

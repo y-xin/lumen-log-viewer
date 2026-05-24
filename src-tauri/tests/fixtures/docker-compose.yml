@@ -1,0 +1,14 @@
+version: '3'
+services:
+  sshd:
+    image: linuxserver/openssh-server:latest
+    container_name: lumen-test-sshd
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Etc/UTC
+      - USER_NAME=test
+      - USER_PASSWORD=testpass
+      - PASSWORD_ACCESS=true
+    ports:
+      - "12222:2222"

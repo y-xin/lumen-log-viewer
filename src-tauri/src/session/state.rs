@@ -8,6 +8,13 @@ use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+/// 透明替换：本地 FileWatcher 和远程 RemoteReader 都装到这个枚举里，
+/// Drop 时按变体清理（File 走现有 FileWatcher::Drop；Ssh 走 RemoteReader::Drop）
+pub enum SourceReader {
+    File(crate::loader::watcher::FileWatcher),
+    Ssh(crate::remote::RemoteReader),
+}
+
 #[derive(Default)]
 pub struct SessionState(RwLock<Option<SessionInner>>);
 
@@ -16,7 +23,7 @@ pub struct SessionInner {
     pub entries: Arc<RwLock<Vec<LogEntry>>>,
     pub cache: HashMap<u64, Arc<Vec<u32>>>,
     pub lines: Arc<Vec<String>>,
-    pub watcher: Option<crate::loader::watcher::FileWatcher>,
+    pub watcher: Option<SourceReader>,
     pub incremental: Option<crate::loader::incremental::IncrementalParser>,
     pub last_offset: u64,
     pub last_inode: u64,
@@ -87,7 +94,7 @@ impl SessionState {
 
     pub fn install_watcher(
         &self,
-        watcher: crate::loader::watcher::FileWatcher,
+        watcher: SourceReader,
         incremental: crate::loader::incremental::IncrementalParser,
     ) -> Result<(), AppError> {
         let mut w = self.0.write();

@@ -79,9 +79,9 @@ pub fn cmd_open_file(
     session.load_with_lines(metadata.clone(), entries, lines);
 
     // 注册路径反向索引（用 canonical 路径，便于 lookup_by_path 命中）
-    if let Ok(canonical) = std::fs::canonicalize(&path) {
-        store.register_path(canonical, window.label().to_string());
-    }
+    // canonicalize 失败（如网络盘 / 软链断）时 fallback 原 path，保证聚焦功能能用
+    let path_key = std::fs::canonicalize(&path).unwrap_or_else(|_| std::path::PathBuf::from(&path));
+    store.register_path(path_key, window.label().to_string());
 
     // 设置窗口标题
     let title = Path::new(&path).file_name()

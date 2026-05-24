@@ -802,3 +802,54 @@ pub async fn cmd_open_remote_file(
 
     Ok(metadata)
 }
+
+// ── Task 6.4: TOFU 主机密钥确认 ──────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn cmd_confirm_host_key(
+    host: String,
+    port: u16,
+    fingerprint: String,
+    action: String, // "trust" | "session-only"
+) -> Result<(), AppError> {
+    use crate::remote::known_hosts;
+    if action == "trust" {
+        let path = known_hosts::default_path();
+        // MVP 简化：假设 ed25519 key type — 覆盖绝大多数现代 server
+        known_hosts::append(&path, &host, port, "ssh-ed25519", &fingerprint)?;
+    }
+    // "session-only" → 不做事；上层连接逻辑会在本次会话内 bypass kh_check
+    Ok(())
+}
+
+// ── Task 6.5: SSH Hosts CRUD ──────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn cmd_list_ssh_hosts(
+    prefs_store: tauri::State<'_, crate::prefs::PrefsStore>,
+) -> std::collections::HashMap<String, crate::prefs::store::SshHostConfig> {
+    prefs_store.list_ssh_hosts()
+}
+
+#[tauri::command]
+pub fn cmd_save_ssh_host(
+    app: tauri::AppHandle,
+    prefs_store: tauri::State<'_, crate::prefs::PrefsStore>,
+    key: String,
+    cfg: crate::prefs::store::SshHostConfig,
+) -> Result<(), AppError> {
+    prefs_store.save_ssh_host(key, cfg)?;
+    let _ = app.emit("lv:prefs-changed", "ssh_hosts");
+    Ok(())
+}
+
+#[tauri::command]
+pub fn cmd_delete_ssh_host(
+    app: tauri::AppHandle,
+    prefs_store: tauri::State<'_, crate::prefs::PrefsStore>,
+    key: String,
+) -> Result<(), AppError> {
+    prefs_store.delete_ssh_host(&key)?;
+    let _ = app.emit("lv:prefs-changed", "ssh_hosts");
+    Ok(())
+}

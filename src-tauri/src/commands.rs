@@ -9,13 +9,13 @@ use crate::parser::registry::Registry;
 use crate::prefs::{CustomTemplate, PrefsStore, SavedFilter};
 use crate::query::{self, QuerySpec};
 use crate::query::neighbor::{NeighborDir, NeighborResponse, PositionResponse};
-use crate::session::SessionState;
+use crate::session_store::SessionStore;
 use crate::stats;
 use serde::{Deserialize, Serialize};
 use std::io::{BufWriter, Write};
 use std::path::Path;
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, State};
 
 #[derive(Serialize)]
 pub struct QueryResponse {
@@ -63,18 +63,36 @@ const BUILTIN_IDS: &[&str] = &[
 
 #[tauri::command]
 pub fn cmd_open_file(
+    window: tauri::Window,
     path: String,
-    state: State<'_, SessionState>,
+    store: State<'_, SessionStore>,
     registry: State<'_, Registry>,
     prefs_store: State<'_, PrefsStore>,
+    app: tauri::AppHandle,
 ) -> Result<FileMetadata, AppError> {
     let lines = reader::read_all_lines(Path::new(&path))?;
     let (entries, template_id, sniff_kind) = parser::parse_with_sniff(&registry, &lines);
     let mut metadata = parser::compute_metadata(&path, &entries, &template_id);
     metadata.sniff_kind = Some(sniff_kind);
-    state.load_with_lines(metadata.clone(), entries, lines);
-    // 成功后记录到最近文件（失败不阻塞）
+
+    let session = store.get_or_create(window.label());
+    session.load_with_lines(metadata.clone(), entries, lines);
+
+    // 注册路径反向索引（用 canonical 路径，便于 lookup_by_path 命中）
+    if let Ok(canonical) = std::fs::canonicalize(&path) {
+        store.register_path(canonical, window.label().to_string());
+    }
+
+    // 设置窗口标题
+    let title = Path::new(&path).file_name()
+        .map(|n| format!("{} — Lumen", n.to_string_lossy()))
+        .unwrap_or_else(|| "Lumen".to_string());
+    let _ = window.set_title(&title);
+
+    // 成功后记录到最近文件（失败不阻塞）+ 广播
     let _ = prefs_store.record_recent(&path);
+    let _ = app.emit("lv:prefs-changed", "recent_files");
+
     Ok(metadata)
 }
 
@@ -89,20 +107,26 @@ pub fn cmd_clear_recent_files(prefs_store: State<'_, PrefsStore>) -> Result<(), 
 }
 
 #[tauri::command]
-pub fn cmd_get_metadata(state: State<'_, SessionState>) -> Result<FileMetadata, AppError> {
-    state.metadata()
+pub fn cmd_get_metadata(
+    window: tauri::Window,
+    store: State<'_, SessionStore>,
+) -> Result<FileMetadata, AppError> {
+    let session = store.get(window.label()).ok_or(AppError::NoSession)?;
+    session.metadata()
 }
 
 #[tauri::command]
 pub fn cmd_query(
+    window: tauri::Window,
     spec: QuerySpec,
     page: u32,
     page_size: u32,
-    state: State<'_, SessionState>,
+    store: State<'_, SessionStore>,
 ) -> Result<QueryResponse, AppError> {
-    let matched = query::run_query(&state, &spec)?;
-    let meta = state.metadata()?;
-    let stats = state.with_entries(|entries| {
+    let session = store.get(window.label()).ok_or(AppError::NoSession)?;
+    let matched = query::run_query(&session, &spec)?;
+    let meta = session.metadata()?;
+    let stats = session.with_entries(|entries| {
         let mut s = stats::aggregate(entries, &matched);
         // 时间窗口：用 spec.time_range（若有）否则用文件整体 time_range
         let range = spec.time_range.or(meta.time_range);
@@ -111,7 +135,7 @@ pub fn cmd_query(
         }
         s
     })?;
-    let page_entries = state.with_entries(|entries| {
+    let page_entries = session.with_entries(|entries| {
         let start = (page * page_size) as usize;
         let end = ((page + 1) * page_size) as usize;
         matched
@@ -126,13 +150,15 @@ pub fn cmd_query(
 /// 单独翻页：相同 spec 下高频调用，复用缓存
 #[tauri::command]
 pub fn cmd_get_page(
+    window: tauri::Window,
     spec: QuerySpec,
     page: u32,
     page_size: u32,
-    state: State<'_, SessionState>,
+    store: State<'_, SessionStore>,
 ) -> Result<Vec<LogEntry>, AppError> {
-    let matched = query::run_query(&state, &spec)?;
-    state.with_entries(|entries| {
+    let session = store.get(window.label()).ok_or(AppError::NoSession)?;
+    let matched = query::run_query(&session, &spec)?;
+    session.with_entries(|entries| {
         let start = (page * page_size) as usize;
         let end = ((page + 1) * page_size) as usize;
         matched.iter().skip(start).take(end - start)
@@ -156,17 +182,19 @@ pub fn cmd_list_templates(registry: State<'_, Registry>) -> Vec<TemplateInfo> {
 
 #[tauri::command]
 pub fn cmd_reparse_with_template(
+    window: tauri::Window,
     template_id: String,
-    state: State<'_, SessionState>,
+    store: State<'_, SessionStore>,
     registry: State<'_, Registry>,
 ) -> Result<FileMetadata, AppError> {
-    let lines = state.lines()?;
+    let session = store.get(window.label()).ok_or(AppError::NoSession)?;
+    let lines = session.lines()?;
     let tpl = registry.find(&template_id)
         .ok_or_else(|| AppError::Internal(format!("模板未找到：{template_id}")))?;
     let entries = parser::parse_with_template(tpl.as_parser(), &lines);
-    let old_meta = state.metadata()?;
+    let old_meta = session.metadata()?;
     let metadata = parser::compute_metadata(&old_meta.path, &entries, &template_id);
-    state.load_with_lines(metadata.clone(), entries, lines.to_vec());
+    session.load_with_lines(metadata.clone(), entries, lines.to_vec());
     Ok(metadata)
 }
 
@@ -245,12 +273,14 @@ pub struct TestResult {
 
 #[tauri::command]
 pub fn cmd_test_template(
+    window: tauri::Window,
     tpl: CustomTemplate,
     limit: u32,
-    state: State<'_, SessionState>,
+    store: State<'_, SessionStore>,
 ) -> Result<TestResult, AppError> {
+    let session = store.get(window.label()).ok_or(AppError::NoSession)?;
     let rt = crate::prefs::store::compile_custom_template(&tpl)?;
-    let lines = state.lines()?;
+    let lines = session.lines()?;
     let sample_limit = (limit as usize).max(1).min(lines.len());
     let sample = &lines[..sample_limit];
 
@@ -311,12 +341,14 @@ pub fn cmd_test_template(
 
 #[tauri::command]
 pub fn cmd_start_follow(
+    window: tauri::Window,
     app: AppHandle,
-    state: State<'_, SessionState>,
+    store: State<'_, SessionStore>,
     registry: State<'_, Registry>,
 ) -> Result<(), AppError> {
-    if state.is_following() { return Ok(()); }
-    let meta = state.metadata()?;
+    let session = store.get(window.label()).ok_or(AppError::NoSession)?;
+    if session.is_following() { return Ok(()); }
+    let meta = session.metadata()?;
     let path: std::path::PathBuf = meta.path.clone().into();
     let template_id = meta.template_id.clone();
     let tpl_arc = registry.find(&template_id)
@@ -329,12 +361,13 @@ pub fn cmd_start_follow(
     let app_for_append = app.clone();
     let app_for_rotation = app.clone();
     let tpl_arc_for_append = tpl_arc.clone();
+    // 闭包中需要持有 session Arc，避免再走 store 查找
+    let session_for_append = session.clone();
 
     let on_append = Arc::new(move |chunk: String| {
-        let session: State<'_, SessionState> = app_for_append.state();
-        if let Ok(new) = session.feed_chunk(tpl_arc_for_append.as_parser(), &chunk) {
+        if let Ok(new) = session_for_append.feed_chunk(tpl_arc_for_append.as_parser(), &chunk) {
             if !new.is_empty() {
-                let total = session.metadata().map(|m| m.total).unwrap_or(0);
+                let total = session_for_append.metadata().map(|m| m.total).unwrap_or(0);
                 let _ = app_for_append.emit("entries_appended", EntriesAppendedPayload { entries: new, total });
             }
         }
@@ -345,35 +378,39 @@ pub fn cmd_start_follow(
     });
 
     let watcher = FileWatcher::start(path, initial, on_append, on_rotation)?;
-    state.install_watcher(watcher, incremental)?;
+    session.install_watcher(watcher, incremental)?;
     Ok(())
 }
 
 #[tauri::command]
 pub fn cmd_stop_follow(
-    state: State<'_, SessionState>,
+    window: tauri::Window,
+    store: State<'_, SessionStore>,
     registry: State<'_, Registry>,
 ) -> Result<(), AppError> {
-    if !state.is_following() { return Ok(()); }
-    let meta = state.metadata()?;
+    let session = store.get(window.label()).ok_or(AppError::NoSession)?;
+    if !session.is_following() { return Ok(()); }
+    let meta = session.metadata()?;
     if let Some(tpl_arc) = registry.find(&meta.template_id) {
-        let _ = state.flush_incremental(tpl_arc.as_parser());
+        let _ = session.flush_incremental(tpl_arc.as_parser());
     }
-    state.remove_watcher()
+    session.remove_watcher()
 }
 
 #[tauri::command]
 pub fn cmd_export(
+    window: tauri::Window,
     spec: QuerySpec,
     format: ExportFormat,
     path: String,
-    state: State<'_, SessionState>,
+    store: State<'_, SessionStore>,
 ) -> Result<ExportResult, AppError> {
-    let matched = query::run_query(&state, &spec)?;
+    let session = store.get(window.label()).ok_or(AppError::NoSession)?;
+    let matched = query::run_query(&session, &spec)?;
     let file = std::fs::File::create(&path)
         .map_err(|e| AppError::Io(format!("创建导出文件失败：{e}")))?;
     let mut w = BufWriter::new(file);
-    state.with_entries(|entries| -> std::io::Result<()> {
+    session.with_entries(|entries| -> std::io::Result<()> {
         match format {
             ExportFormat::Csv       => crate::export::export_csv(entries, &matched, &mut w),
             ExportFormat::Jsonl     => crate::export::export_jsonl(entries, &matched, &mut w),
@@ -427,21 +464,25 @@ pub fn cmd_rename_saved_filter(
 
 #[tauri::command]
 pub fn cmd_get_neighbor(
+    window: tauri::Window,
     spec: QuerySpec,
     line_no: u32,
     dir: NeighborDir,
-    state: State<'_, SessionState>,
+    store: State<'_, SessionStore>,
 ) -> Result<Option<NeighborResponse>, AppError> {
-    query::neighbor::neighbor(&state, &spec, line_no, dir)
+    let session = store.get(window.label()).ok_or(AppError::NoSession)?;
+    query::neighbor::neighbor(&session, &spec, line_no, dir)
 }
 
 #[tauri::command]
 pub fn cmd_get_position(
+    window: tauri::Window,
     spec: QuerySpec,
     line_no: u32,
-    state: State<'_, SessionState>,
+    store: State<'_, SessionStore>,
 ) -> Result<Option<PositionResponse>, AppError> {
-    query::neighbor::position(&state, &spec, line_no)
+    let session = store.get(window.label()).ok_or(AppError::NoSession)?;
+    query::neighbor::position(&session, &spec, line_no)
 }
 
 // ─── UI 偏好（列宽持久化）───

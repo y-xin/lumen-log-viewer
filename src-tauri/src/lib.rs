@@ -14,7 +14,7 @@ pub mod stats;
 
 use parser::registry::Registry;
 use prefs::PrefsStore;
-use session::SessionState;
+use session_store::SessionStore;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -29,7 +29,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .manage(SessionState::default())
+        .manage(SessionStore::new())
         .manage(registry)
         .manage(prefs_store)
         .invoke_handler(tauri::generate_handler![

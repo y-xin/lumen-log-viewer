@@ -9,6 +9,7 @@ pub mod parser;
 pub mod prefs;
 pub mod query;
 pub mod session;
+pub mod session_store;
 pub mod stats;
 
 use parser::registry::Registry;

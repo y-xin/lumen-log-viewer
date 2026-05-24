@@ -45,18 +45,19 @@ fn closing_one_window_leaves_other_alive() {
 }
 
 #[test]
-fn lookup_by_path_returns_existing_label() {
-    // 注册 path → label 后可反查；close 后索引被清理
+fn lookup_by_uri_returns_existing_label() {
+    // 注册 URI → label 后可反查；close 后索引被清理
+    // (Task 5.2 后 register_path 接 URI 字符串而非 PathBuf；lookup_by_path → lookup_by_uri)
     let store = SessionStore::new();
     let _a = store.get_or_create("win-a");
-    store.register_path(PathBuf::from("/tmp/a.log"), "win-a".into());
+    store.register_path("file:///tmp/a.log".into(), "win-a".into());
     assert_eq!(
-        store.lookup_by_path(&PathBuf::from("/tmp/a.log")),
+        store.lookup_by_uri("file:///tmp/a.log"),
         Some("win-a".into())
     );
     // 不同路径应返回 None
-    assert_eq!(store.lookup_by_path(&PathBuf::from("/tmp/b.log")), None);
+    assert_eq!(store.lookup_by_uri("file:///tmp/b.log"), None);
     // close 后反向索引应被清理
     store.close("win-a");
-    assert_eq!(store.lookup_by_path(&PathBuf::from("/tmp/a.log")), None);
+    assert_eq!(store.lookup_by_uri("file:///tmp/a.log"), None);
 }

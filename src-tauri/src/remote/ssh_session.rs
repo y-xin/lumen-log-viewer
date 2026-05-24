@@ -153,6 +153,17 @@ impl SshSession {
         Ok(SshSession { handle })
     }
 
+    /// 测试连接：完成握手 + 认证后立即 disconnect。不开 channel。
+    /// 给 cmd_test_ssh_connection 用 — 用户在 OpenRemoteDialog 点 [测试连接] 时调
+    pub async fn test_only(
+        params: &SshConnectionParams,
+        kh_check: KhCheck,
+    ) -> Result<(), AppError> {
+        let s = Self::connect(params, kh_check).await?;
+        s.disconnect().await;
+        Ok(())
+    }
+
     /// 优雅断开连接（忽略错误，drop 前调用）
     pub async fn disconnect(self) {
         let _ = self

@@ -37,6 +37,13 @@ impl From<std::io::Error> for AppError {
     }
 }
 
+// russh::Error → AppError（Handler::Error 关联类型约束必需）
+impl From<russh::Error> for AppError {
+    fn from(e: russh::Error) -> Self {
+        AppError::SshNetwork(e.to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

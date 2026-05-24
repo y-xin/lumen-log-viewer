@@ -147,3 +147,56 @@ export interface PositionResponse {
   position: number;
   total: number;
 }
+
+// === Log source (multi-source: local / remote ssh) ===
+
+export type LogSource =
+  | { kind: 'local'; path: string }
+  | { kind: 'remote'; host: string; user: string; port: number; path: string };
+
+export function logSourceToUri(s: LogSource): string {
+  if (s.kind === 'local') return `file://${s.path}`;
+  const portSuffix = s.port === 22 ? '' : `:${s.port}`;
+  const path = s.path.startsWith('/') ? s.path : `/${s.path}`;
+  return `ssh://${s.user}@${s.host}${portSuffix}${path}`;
+}
+
+export function logSourceFromUri(
+  uri: string,
+  opts: { allowLegacyPath?: boolean } = {},
+): LogSource {
+  if (uri.startsWith('file://')) {
+    return { kind: 'local', path: uri.slice('file://'.length) };
+  }
+  if (uri.startsWith('ssh://')) {
+    const rest = uri.slice('ssh://'.length);
+    const slash = rest.indexOf('/');
+    if (slash < 0) throw new Error(`ssh URI 缺路径：${uri}`);
+    const userHost = rest.slice(0, slash);
+    const path = rest.slice(slash);
+    const at = userHost.indexOf('@');
+    if (at < 0) throw new Error(`ssh URI 缺 user：${uri}`);
+    const user = userHost.slice(0, at);
+    const hostPort = userHost.slice(at + 1);
+    const colon = hostPort.lastIndexOf(':');
+    if (colon < 0) {
+      return { kind: 'remote', host: hostPort, user, port: 22, path };
+    }
+    const portStr = hostPort.slice(colon + 1);
+    const port = Number(portStr);
+    if (!Number.isFinite(port) || port < 1 || port > 65535) {
+      throw new Error(`ssh URI port 非法：${portStr}`);
+    }
+    return { kind: 'remote', host: hostPort.slice(0, colon), user, port, path };
+  }
+  if (opts.allowLegacyPath) {
+    return { kind: 'local', path: uri };
+  }
+  throw new Error(`未识别的 URI scheme：${uri}`);
+}
+
+export function logSourceDisplayName(s: LogSource): string {
+  const filename = (p: string) => p.split('/').filter(Boolean).pop() ?? p;
+  if (s.kind === 'local') return filename(s.path);
+  return `${filename(s.path)} (${s.user}@${s.host})`;
+}

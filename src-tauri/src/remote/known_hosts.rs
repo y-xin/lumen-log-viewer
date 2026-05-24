@@ -15,8 +15,8 @@ pub enum KnownHostsLookup {
 }
 
 pub fn default_path() -> PathBuf {
-    std::env::home_dir()
-        .map(|h| h.join(".ssh").join("known_hosts"))
+    directories::UserDirs::new()
+        .map(|d| d.home_dir().join(".ssh").join("known_hosts"))
         .unwrap_or_else(|| PathBuf::from(".ssh/known_hosts"))
 }
 

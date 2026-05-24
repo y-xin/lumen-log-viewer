@@ -102,8 +102,13 @@ pub fn cmd_list_recent_files(prefs_store: State<'_, PrefsStore>) -> Vec<String> 
 }
 
 #[tauri::command]
-pub fn cmd_clear_recent_files(prefs_store: State<'_, PrefsStore>) -> Result<(), AppError> {
-    prefs_store.clear_recent()
+pub fn cmd_clear_recent_files(
+    app: tauri::AppHandle,
+    prefs_store: State<'_, PrefsStore>,
+) -> Result<(), AppError> {
+    prefs_store.clear_recent()?;
+    let _ = app.emit("lv:prefs-changed", "recent_files");
+    Ok(())
 }
 
 #[tauri::command]
@@ -200,6 +205,7 @@ pub fn cmd_reparse_with_template(
 
 #[tauri::command]
 pub fn cmd_save_custom_template(
+    app: tauri::AppHandle,
     tpl: CustomTemplate,
     registry: State<'_, Registry>,
     prefs_store: State<'_, PrefsStore>,
@@ -218,6 +224,7 @@ pub fn cmd_save_custom_template(
     prefs.custom_templates.retain(|t| t.id != tpl.id);
     prefs.custom_templates.push(tpl);
     prefs_store.save(&prefs)?;
+    let _ = app.emit("lv:prefs-changed", "templates");
     Ok(())
 }
 
@@ -238,6 +245,7 @@ pub fn cmd_get_custom_template(
 
 #[tauri::command]
 pub fn cmd_delete_custom_template(
+    app: tauri::AppHandle,
     id: String,
     registry: State<'_, Registry>,
     prefs_store: State<'_, PrefsStore>,
@@ -249,6 +257,7 @@ pub fn cmd_delete_custom_template(
     let mut prefs = prefs_store.load();
     prefs.custom_templates.retain(|t| t.id != id);
     prefs_store.save(&prefs)?;
+    let _ = app.emit("lv:prefs-changed", "templates");
     Ok(())
 }
 
@@ -434,30 +443,39 @@ pub fn cmd_list_saved_filters(
 
 #[tauri::command]
 pub fn cmd_save_filter(
+    app: tauri::AppHandle,
     prefs_store: State<'_, PrefsStore>,
     file_path: String,
     filter: SavedFilter,
 ) -> Result<Vec<SavedFilter>, AppError> {
-    prefs_store.save_filter(&file_path, filter)
+    let result = prefs_store.save_filter(&file_path, filter)?;
+    let _ = app.emit("lv:prefs-changed", "saved_filters");
+    Ok(result)
 }
 
 #[tauri::command]
 pub fn cmd_delete_saved_filter(
+    app: tauri::AppHandle,
     prefs_store: State<'_, PrefsStore>,
     file_path: String,
     id: String,
 ) -> Result<Vec<SavedFilter>, AppError> {
-    prefs_store.delete_filter(&file_path, &id)
+    let result = prefs_store.delete_filter(&file_path, &id)?;
+    let _ = app.emit("lv:prefs-changed", "saved_filters");
+    Ok(result)
 }
 
 #[tauri::command]
 pub fn cmd_rename_saved_filter(
+    app: tauri::AppHandle,
     prefs_store: State<'_, PrefsStore>,
     file_path: String,
     id: String,
     new_name: String,
 ) -> Result<Vec<SavedFilter>, AppError> {
-    prefs_store.rename_filter(&file_path, &id, &new_name)
+    let result = prefs_store.rename_filter(&file_path, &id, &new_name)?;
+    let _ = app.emit("lv:prefs-changed", "saved_filters");
+    Ok(result)
 }
 
 // ─── Cross-page Detail Nav ───
@@ -496,10 +514,13 @@ pub fn cmd_get_column_widths(
 
 #[tauri::command]
 pub fn cmd_save_column_widths(
+    app: tauri::AppHandle,
     prefs_store: State<'_, PrefsStore>,
     widths: std::collections::HashMap<String, u32>,
 ) -> Result<(), AppError> {
-    prefs_store.save_column_widths(widths)
+    prefs_store.save_column_widths(widths)?;
+    let _ = app.emit("lv:prefs-changed", "column_prefs");
+    Ok(())
 }
 
 #[tauri::command]
@@ -511,10 +532,13 @@ pub fn cmd_get_column_visibility(
 
 #[tauri::command]
 pub fn cmd_save_column_visibility(
+    app: tauri::AppHandle,
     prefs_store: State<'_, PrefsStore>,
     visibility: std::collections::HashMap<String, bool>,
 ) -> Result<(), AppError> {
-    prefs_store.save_column_visibility(visibility)
+    prefs_store.save_column_visibility(visibility)?;
+    let _ = app.emit("lv:prefs-changed", "column_prefs");
+    Ok(())
 }
 
 #[tauri::command]
@@ -524,10 +548,13 @@ pub fn cmd_get_font_size(prefs_store: State<'_, PrefsStore>) -> Option<u32> {
 
 #[tauri::command]
 pub fn cmd_save_font_size(
+    app: tauri::AppHandle,
     prefs_store: State<'_, PrefsStore>,
     size: u32,
 ) -> Result<(), AppError> {
-    prefs_store.save_font_size(size)
+    prefs_store.save_font_size(size)?;
+    let _ = app.emit("lv:prefs-changed", "font_size");
+    Ok(())
 }
 
 #[tauri::command]

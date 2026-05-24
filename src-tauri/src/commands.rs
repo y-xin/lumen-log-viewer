@@ -14,7 +14,7 @@ use crate::session_store::SessionStore;
 use crate::stats;
 use serde::{Deserialize, Serialize};
 use std::io::{BufWriter, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
 
@@ -79,10 +79,11 @@ pub fn cmd_open_file(
     let session = store.get_or_create(window.label());
     session.load_with_lines(metadata.clone(), entries, lines);
 
-    // 注册路径反向索引（用 canonical 路径，便于 lookup_by_path 命中）
+    // 注册路径反向索引（用 canonical 路径转 URI，便于 lookup_by_uri 命中）
     // canonicalize 失败（如网络盘 / 软链断）时 fallback 原 path，保证聚焦功能能用
-    let path_key = std::fs::canonicalize(&path).unwrap_or_else(|_| std::path::PathBuf::from(&path));
-    store.register_path(path_key, window.label().to_string());
+    let canonical_key = std::fs::canonicalize(&path).unwrap_or_else(|_| PathBuf::from(&path));
+    let uri = crate::model::LogSource::Local { path: canonical_key }.to_uri();
+    store.register_path(uri, window.label().to_string());
 
     // 设置窗口标题
     let title = Path::new(&path).file_name()
@@ -585,10 +586,11 @@ pub async fn cmd_open_in_new_window(
 
     // 规范化路径（canonicalize 失败时 fallback 原 path，与 cmd_open_file 行为一致）
     let canonical = std::fs::canonicalize(&path)
-        .unwrap_or_else(|_| std::path::PathBuf::from(&path));
+        .unwrap_or_else(|_| PathBuf::from(&path));
+    let uri = crate::model::LogSource::Local { path: canonical.clone() }.to_uri();
 
     // 查反向索引：已打开就聚焦
-    if let Some(existing_label) = store.lookup_by_path(&canonical) {
+    if let Some(existing_label) = store.lookup_by_uri(&uri) {
         if let Some(w) = app.get_webview_window(&existing_label) {
             let _ = w.set_focus();
             return Ok(());

@@ -34,7 +34,7 @@ notify = "6"
 dashmap = "6"
 uuid = { version = "1", features = ["v4"] }
 urlencoding = "2"
-russh = "0.50.0-beta.7"
+russh = "0.50.4"
 russh-keys = "0.50.0-beta.7"
 shell-escape = "0.1"
 

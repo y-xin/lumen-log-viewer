@@ -20,12 +20,13 @@ import { ShortcutsHelp } from './components/ShortcutsHelp';
 import { GotoLineDialog } from './components/GotoLineDialog';
 import { SettingsDialog } from './components/SettingsDialog';
 import { SniffQualityBanner } from './components/SniffQualityBanner';
-import { loadUiPrefs, applyUiPrefs } from './lib/uiPrefs';
+import { loadUiPrefs, applyUiPrefs, DEFAULT as UI_DEFAULT } from './lib/uiPrefs';
 import { useEffect as useEffectInit } from 'react';
 import { getFontSize, saveFontSize } from './api/commands';
 
-// 启动时立即应用 UI 偏好（在 React render 之前生效，避免 light → dark 闪烁）
-applyUiPrefs(loadUiPrefs());
+// 启动时同步应用默认值（避免白屏闪），再异步从后端拉真实偏好 reapply
+applyUiPrefs(UI_DEFAULT);
+loadUiPrefs().then(applyUiPrefs).catch(() => {});
 
 export default function App() {
   const { metadata, loading, error } = useSession();

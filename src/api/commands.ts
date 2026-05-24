@@ -170,3 +170,17 @@ export async function getFontSize(): Promise<number | null> {
 export async function saveFontSize(size: number): Promise<void> {
   return invoke<void>('cmd_save_font_size', { size });
 }
+
+export interface RawUiPrefs {
+  theme: string;      // "" | "light" | "dark"
+  accent: string;     // "" | "blue" | "violet" | "teal" | "rose"
+  highlight: string;  // "" | "yellow" | "emerald" | "pink" | "sky"
+}
+
+export async function getUiPrefs(): Promise<RawUiPrefs> {
+  return invoke<RawUiPrefs>('cmd_get_ui_prefs');
+}
+
+export async function saveUiPrefs(uiPrefs: RawUiPrefs): Promise<void> {
+  await invoke('cmd_save_ui_prefs', { uiPrefs });
+}

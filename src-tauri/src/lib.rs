@@ -32,6 +32,14 @@ pub fn run() {
         .manage(SessionStore::new())
         .manage(registry)
         .manage(prefs_store)
+        .on_window_event(|window, event| {
+            use tauri::WindowEvent;
+            use tauri::Manager;
+            if let WindowEvent::CloseRequested { .. } = event {
+                let store: tauri::State<session_store::SessionStore> = window.state();
+                store.close(window.label());
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             commands::cmd_open_file,
             commands::cmd_query,

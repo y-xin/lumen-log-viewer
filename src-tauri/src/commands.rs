@@ -3,6 +3,7 @@
 use crate::error::AppError;
 use crate::loader::reader;
 use crate::loader::{incremental::IncrementalParser, watcher::{FileWatcher, RotationEvent}};
+use crate::session::state::SourceReader;
 use crate::model::{FileMetadata, LogEntry, Stats};
 use crate::parser;
 use crate::parser::registry::Registry;
@@ -387,7 +388,7 @@ pub fn cmd_start_follow(
     });
 
     let watcher = FileWatcher::start(path, initial, on_append, on_rotation)?;
-    session.install_watcher(watcher, incremental)?;
+    session.install_watcher(SourceReader::File(watcher), incremental)?;
     Ok(())
 }
 

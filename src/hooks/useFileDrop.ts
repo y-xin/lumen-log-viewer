@@ -3,8 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
-import { openFile } from '../api/commands';
-import { useSession } from '../state/session';
+import { openInNewWindow } from '../api/window';
 
 const LOG_EXTENSIONS = ['log', 'jsonl', 'txt', 'out'];
 
@@ -14,24 +13,13 @@ function isLogPath(path: string): boolean {
 }
 
 export function useFileDrop(): boolean {
-  const { loadFile, setError, setLoading } = useSession();
   const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
     let unlisten: (() => void) | null = null;
 
     const handleDrop = async (target: string) => {
-      setError(null);
-      try {
-        setLoading(true);
-        const md = await openFile(target);
-        loadFile(md);   // 重置 spec / result / 选中行
-      } catch (e) {
-        const msg = typeof e === 'string' ? e : JSON.stringify(e);
-        setError(`打开失败：${msg}`);
-      } finally {
-        setLoading(false);
-      }
+      await openInNewWindow(target);
     };
 
     const setup = async () => {
@@ -60,7 +48,7 @@ export function useFileDrop(): boolean {
     setup();
 
     return () => { unlisten?.(); };
-  }, [loadFile, setError, setLoading]);
+  }, []);
 
   return isDragging;
 }

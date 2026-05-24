@@ -23,7 +23,7 @@ import { SettingsDialog } from './components/SettingsDialog';
 import { SniffQualityBanner } from './components/SniffQualityBanner';
 import { loadUiPrefs, applyUiPrefs, migrateLegacyLocalStorage, DEFAULT as UI_DEFAULT } from './lib/uiPrefs';
 import { useEffect as useEffectInit } from 'react';
-import { getFontSize, saveFontSize } from './api/commands';
+import { getFontSize, saveFontSize, openFile } from './api/commands';
 
 // 启动时同步应用默认值（避免白屏闪）
 applyUiPrefs(UI_DEFAULT);
@@ -62,6 +62,17 @@ export default function App() {
       saveFontSize(fontSize).catch(() => {});
     }
   }, [fontSize]);
+
+  // 多窗口启动：从 URL ?path= 读取初始文件（cmd_open_in_new_window 创建新窗口时拼的 URL）
+  useEffectInit(() => {
+    const params = new URLSearchParams(window.location.search);
+    const initialPath = params.get('path');
+    if (initialPath) {
+      openFile(decodeURIComponent(initialPath))
+        .then((md) => useSession.getState().loadFile(md))
+        .catch(() => {});
+    }
+  }, []);
 
   return (
     <div className="h-screen flex flex-col bg-slate-50 text-slate-900">

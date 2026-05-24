@@ -16,6 +16,7 @@ import { useTailStatsRefresh } from './hooks/useTailStatsRefresh';
 import { useFileDrop } from './hooks/useFileDrop';
 import { useAutoOpenRecent } from './hooks/useAutoOpenRecent';
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
+import { usePrefsSync } from './hooks/usePrefsSync';
 import { ShortcutsHelp } from './components/ShortcutsHelp';
 import { GotoLineDialog } from './components/GotoLineDialog';
 import { SettingsDialog } from './components/SettingsDialog';
@@ -37,6 +38,7 @@ export default function App() {
   useTailStatsRefresh();
   useAutoOpenRecent();
   useGlobalShortcuts();
+  usePrefsSync();
   const isDragging = useFileDrop();
 
   // 启动时：迁移历史存储 + 异步拉真实偏好 reapply

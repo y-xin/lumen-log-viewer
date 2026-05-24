@@ -22,6 +22,7 @@ const M = isMac ? '⌘' : 'Ctrl';
 
 const SHORTCUT_ROWS: Array<{ keys: string; desc: string }> = [
   { keys: `${M} O`, desc: '打开文件' },
+  { keys: `${M} N`, desc: '新建空白窗口' },
   { keys: `${M} R`, desc: '刷新当前查询' },
   { keys: `${M} F`, desc: '聚焦关键词搜索' },
   { keys: `${M} K`, desc: '清空所有筛选' },

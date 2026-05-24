@@ -1,4 +1,4 @@
-// 统一设置面板：4 tab — 通用 / 颜色 / 快捷键 / 模板
+// 统一设置面板：5 tab — 通用 / 颜色 / 快捷键 / 模板 / 远程
 // 视觉偏好走 prefs.json（后端存储，多窗同步），字号走 zustand+prefs.json，
 // 模板入口跳现有 TemplateManagerDialog，快捷键暂只读
 
@@ -9,13 +9,14 @@ import {
   ACCENT_PALETTE, HIGHLIGHT_PALETTE, DEFAULT,
   type UiPrefs, type Theme, type AccentName, type HighlightName,
 } from '../lib/uiPrefs';
+import { listSshHosts, deleteSshHost, type SshHostConfig } from '../api/remote';
 
 interface Props {
   onClose: () => void;
   onOpenTemplateManager: () => void;
 }
 
-type Tab = 'general' | 'colors' | 'shortcuts' | 'templates';
+type Tab = 'general' | 'colors' | 'shortcuts' | 'templates' | 'remote';
 
 const isMac = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform);
 const M = isMac ? '⌘' : 'Ctrl';
@@ -72,6 +73,7 @@ export function SettingsDialog({ onClose, onOpenTemplateManager }: Props) {
             ['colors',    '颜色'],
             ['shortcuts', '快捷键'],
             ['templates', '模板'],
+            ['remote',    '远程'],
           ] as const).map(([k, label]) => (
             <button
               key={k}
@@ -97,6 +99,7 @@ export function SettingsDialog({ onClose, onOpenTemplateManager }: Props) {
               {tab === 'colors' && '颜色'}
               {tab === 'shortcuts' && '快捷键'}
               {tab === 'templates' && '解析模板'}
+              {tab === 'remote' && '远程 SSH'}
             </h3>
             <button onClick={onClose} className="text-slate-500 hover:text-slate-700">✕</button>
           </header>
@@ -180,6 +183,8 @@ export function SettingsDialog({ onClose, onOpenTemplateManager }: Props) {
                 </button>
               </>
             )}
+
+            {tab === 'remote' && <RemoteSettingsTab />}
           </div>
         </section>
       </div>
@@ -238,6 +243,50 @@ function SwatchRow({
           <span>{opt.label}</span>
         </button>
       ))}
+    </div>
+  );
+}
+
+// 远程 SSH host 配置列表（只读展示 + 删除）
+function RemoteSettingsTab() {
+  const [hosts, setHosts] = useState<Record<string, SshHostConfig>>({});
+
+  const refetch = () => listSshHosts().then(setHosts).catch(() => {});
+
+  useEffect(() => { refetch(); }, []);
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-slate-500">
+        管理 SSH host 默认配置（user / 私钥路径）。passphrase 永不持久化。
+      </p>
+      <div className="border rounded divide-y">
+        {Object.entries(hosts).length === 0 && (
+          <div className="px-3 py-2 text-xs text-slate-400">暂无 host 配置</div>
+        )}
+        {Object.entries(hosts).map(([key, cfg]) => (
+          <div key={key} className="px-3 py-2 flex items-center text-xs">
+            <div className="flex-1">
+              <div className="font-medium">{key}</div>
+              <div className="text-slate-500 mt-0.5">
+                {cfg.user} · {cfg.key_path}
+                {cfg.last_path && <span className="ml-2 text-slate-400">↳ {cfg.last_path}</span>}
+              </div>
+            </div>
+            <button
+              className="ctl text-red-600"
+              onClick={async () => {
+                if (confirm(`删除 ${key} 的配置？`)) {
+                  await deleteSshHost(key);
+                  refetch();
+                }
+              }}
+            >
+              删除
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

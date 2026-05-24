@@ -625,3 +625,16 @@ pub async fn cmd_open_blank_window(app: tauri::AppHandle) -> Result<(), String> 
         .map_err(|e| format!("创建窗口失败: {}", e))?;
     Ok(())
 }
+
+// ─── Remote SSH ───
+
+#[tauri::command]
+pub async fn cmd_test_ssh_connection(
+    params: crate::remote::ssh_session::SshConnectionParams,
+) -> Result<(), AppError> {
+    crate::remote::ssh_session::SshSession::test_only(
+        &params,
+        crate::remote::ssh_session::default_kh_check(),
+    )
+    .await
+}

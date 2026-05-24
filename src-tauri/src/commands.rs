@@ -6,7 +6,7 @@ use crate::loader::{incremental::IncrementalParser, watcher::{FileWatcher, Rotat
 use crate::model::{FileMetadata, LogEntry, Stats};
 use crate::parser;
 use crate::parser::registry::Registry;
-use crate::prefs::{CustomTemplate, PrefsStore, SavedFilter};
+use crate::prefs::{CustomTemplate, PrefsStore, SavedFilter, UiPrefs};
 use crate::query::{self, QuerySpec};
 use crate::query::neighbor::{NeighborDir, NeighborResponse, PositionResponse};
 use crate::session_store::SessionStore;
@@ -528,4 +528,70 @@ pub fn cmd_save_font_size(
     size: u32,
 ) -> Result<(), AppError> {
     prefs_store.save_font_size(size)
+}
+
+#[tauri::command]
+pub fn cmd_get_ui_prefs(prefs_store: State<'_, PrefsStore>) -> UiPrefs {
+    prefs_store.get_ui_prefs()
+}
+
+#[tauri::command]
+pub fn cmd_save_ui_prefs(
+    prefs_store: State<'_, PrefsStore>,
+    app: tauri::AppHandle,
+    ui_prefs: UiPrefs,
+) -> Result<(), AppError> {
+    prefs_store.save_ui_prefs(ui_prefs)?;
+    let _ = app.emit("lv:prefs-changed", "ui");
+    Ok(())
+}
+
+/// 统一"打开文件"入口：同路径聚焦已有窗口，否则创建新窗口
+#[tauri::command]
+pub async fn cmd_open_in_new_window(
+    app: tauri::AppHandle,
+    store: State<'_, SessionStore>,
+    path: String,
+) -> Result<(), String> {
+    use tauri::{WebviewUrl, WebviewWindowBuilder, Manager};
+
+    // 规范化路径（canonicalize 失败时 fallback 原 path，与 cmd_open_file 行为一致）
+    let canonical = std::fs::canonicalize(&path)
+        .unwrap_or_else(|_| std::path::PathBuf::from(&path));
+
+    // 查反向索引：已打开就聚焦
+    if let Some(existing_label) = store.lookup_by_path(&canonical) {
+        if let Some(w) = app.get_webview_window(&existing_label) {
+            let _ = w.set_focus();
+            return Ok(());
+        }
+        // label 在反向索引里但窗口已销毁 — 清理后走 fallthrough 开新窗
+        store.close(&existing_label);
+    }
+
+    // 创建新窗口
+    let label = format!("win-{}", uuid::Uuid::new_v4().simple());
+    let canonical_str = canonical.to_string_lossy().into_owned();
+    let encoded_path = urlencoding::encode(&canonical_str);
+    let url = format!("/?path={}", encoded_path);
+    WebviewWindowBuilder::new(&app, &label, WebviewUrl::App(url.into()))
+        .title("Lumen")
+        .inner_size(1200.0, 800.0)
+        .build()
+        .map_err(|e| format!("创建窗口失败: {}", e))?;
+
+    Ok(())
+}
+
+/// 弹空白窗口（⌘N / macOS dock reopen）
+#[tauri::command]
+pub async fn cmd_open_blank_window(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri::{WebviewUrl, WebviewWindowBuilder};
+    let label = format!("win-{}", uuid::Uuid::new_v4().simple());
+    WebviewWindowBuilder::new(&app, &label, WebviewUrl::App("/".into()))
+        .title("Lumen")
+        .inner_size(1200.0, 800.0)
+        .build()
+        .map_err(|e| format!("创建窗口失败: {}", e))?;
+    Ok(())
 }

@@ -638,3 +638,91 @@ pub async fn cmd_test_ssh_connection(
     )
     .await
 }
+
+#[tauri::command]
+pub async fn cmd_open_remote_file(
+    window: tauri::Window,
+    app: AppHandle,
+    store: State<'_, SessionStore>,
+    registry: State<'_, Registry>,
+    params: crate::remote::SshConnectionParams,
+    path: String,
+    tail_lines: usize,
+) -> Result<FileMetadata, AppError> {
+    // 1. 创建（或复用）当前 window 的 session
+    let session = store.get_or_create(window.label());
+
+    // 2. 构建 LogSource URI，注册反向索引
+    let source = crate::model::LogSource::Remote {
+        host: params.host.clone(),
+        user: params.user.clone(),
+        port: params.port,
+        path: path.clone(),
+    };
+    let uri = source.to_uri();
+    store.register_path(uri.clone(), window.label().to_string());
+
+    // 3. 构建占位 metadata（远程无本地 inode/size，用空集合填充）
+    let metadata = FileMetadata {
+        path: uri.clone(),
+        total: 0,
+        time_range: None,
+        level_counts: std::collections::HashMap::new(),
+        scopes: vec![],
+        scope_counts: std::collections::HashMap::new(),
+        template_id: "json-lines".to_string(),
+        sniff_kind: Some("remote".to_string()),
+    };
+    session.load_with_lines(metadata.clone(), Vec::new(), Vec::new());
+
+    // 4. 取默认解析模板（json-lines 是内置首个）
+    let tpl_arc = registry.find("json-lines")
+        .ok_or_else(|| AppError::Internal("内置模板 json-lines 未找到".into()))?;
+
+    // 5. 启动 RemoteReader：on_chunk 喂 session.feed_chunk；on_disconnect emit 事件
+    let session_for_chunk = session.clone();
+    let tpl_for_chunk = tpl_arc.clone();
+    let app_for_chunk = app.clone();
+    let label_for_chunk = window.label().to_string();
+
+    let on_chunk: Arc<dyn Fn(String) + Send + Sync> = Arc::new(move |chunk| {
+        if let Ok(new_entries) = session_for_chunk.feed_chunk(tpl_for_chunk.as_parser(), &chunk) {
+            if !new_entries.is_empty() {
+                let total = session_for_chunk.metadata().map(|m| m.total).unwrap_or(0);
+                let _ = app_for_chunk.emit_to(
+                    &label_for_chunk,
+                    "entries_appended",
+                    EntriesAppendedPayload { entries: new_entries, total },
+                );
+            }
+        }
+    });
+
+    let app_for_disc = app.clone();
+    let label_for_disc = window.label().to_string();
+    let on_disc: Arc<dyn Fn(crate::remote::DisconnectReason) + Send + Sync> =
+        Arc::new(move |reason| {
+            use crate::remote::DisconnectReason;
+            let (kind, message, will_retry) = match reason {
+                DisconnectReason::Network(m)  => ("network", m, true),
+                DisconnectReason::Auth(m)     => ("auth", m, false),
+                DisconnectReason::HostKeyChanged => ("host-key-changed", String::new(), false),
+                DisconnectReason::ServerClosed   => ("server-closed", String::new(), true),
+            };
+            let _ = app_for_disc.emit_to(
+                &label_for_disc,
+                "lv:remote-disconnected",
+                serde_json::json!({ "reason": kind, "message": message, "will_retry": will_retry }),
+            );
+        });
+
+    let reader = crate::remote::RemoteReader::start(params, path, tail_lines, on_chunk, on_disc)?;
+
+    // 6. IncrementalParser 起始行号从 1 开始（远程 tail 全新流）
+    let incremental = IncrementalParser::new(1);
+    session.install_watcher(SourceReader::Ssh(reader), incremental)?;
+
+    let _ = app.emit_to(window.label(), "lv:remote-connected", &uri);
+
+    Ok(metadata)
+}

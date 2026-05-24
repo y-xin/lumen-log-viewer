@@ -1,11 +1,8 @@
 // 视觉偏好（主题 / 强调色 / 高亮色）的本地持久化
-// 选 localStorage 而不是 prefs.json 的原因：这些偏好 (a) 不需要跨设备同步
-// (b) 启动时需立即生效（无后端等待）(c) 避免再加 6 个 tauri cmd
-//
-// 字段：
-//   - theme: 'light' | 'dark'   — dark 当前是"实验性" 半完成
-//   - accent: 主色调（影响 .ctl-primary / 选中态 / focus ring）
-//   - highlight: 关键词命中色（HighlightedText / mark）
+// v2：从 localStorage 迁到 prefs.json（多窗口跨窗同步）
+// 启动序列：同步立即 apply DEFAULT → 异步拉真实值 reapply
+
+import { getUiPrefs as apiGetUi, saveUiPrefs as apiSaveUi } from '../api/commands';
 
 export type Theme = 'light' | 'dark';
 export type AccentName = 'blue' | 'violet' | 'teal' | 'rose';
@@ -17,13 +14,9 @@ export interface UiPrefs {
   highlight: HighlightName;
 }
 
-const KEY = 'lv:ui-prefs';
+const LEGACY_KEY = 'lv:ui-prefs';
+export const DEFAULT: UiPrefs = { theme: 'light', accent: 'blue', highlight: 'yellow' };
 
-const DEFAULT: UiPrefs = { theme: 'light', accent: 'blue', highlight: 'yellow' };
-
-// ─── 色板（CSS 值，注入到 :root 的 var） ──────────────────
-// bg: 亮色模式选中态浅底（蓝 50 / 紫 50 …）
-// bgDark: 暗色模式选中态 — 半透明 accent，叠在 surface 上既不发白也不糊
 export const ACCENT_PALETTE: Record<AccentName, { name: string; main: string; hover: string; bg: string; bgDark: string }> = {
   blue:   { name: '蓝',    main: '#2563eb', hover: '#1d4ed8', bg: '#eff6ff', bgDark: 'rgba(37,99,235,0.22)' },
   violet: { name: '紫',    main: '#7c3aed', hover: '#6d28d9', bg: '#f5f3ff', bgDark: 'rgba(124,58,237,0.22)' },
@@ -38,23 +31,27 @@ export const HIGHLIGHT_PALETTE: Record<HighlightName, { name: string; bg: string
   sky:     { name: '天蓝',  bg: '#bae6fd', text: '#0c4a6e' },
 };
 
-export function loadUiPrefs(): UiPrefs {
+function normalize(raw: { theme: string; accent: string; highlight: string }): UiPrefs {
+  return {
+    theme:     raw.theme === 'dark' ? 'dark' : 'light',
+    accent:    (raw.accent in ACCENT_PALETTE)       ? raw.accent as AccentName    : DEFAULT.accent,
+    highlight: (raw.highlight in HIGHLIGHT_PALETTE) ? raw.highlight as HighlightName : DEFAULT.highlight,
+  };
+}
+
+/** 从后端拉 — async，启动时和 prefs-changed 时调 */
+export async function loadUiPrefs(): Promise<UiPrefs> {
   try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return DEFAULT;
-    const parsed = JSON.parse(raw);
-    return {
-      theme:     parsed.theme === 'dark' ? 'dark' : 'light',
-      accent:    (parsed.accent in ACCENT_PALETTE) ? parsed.accent : DEFAULT.accent,
-      highlight: (parsed.highlight in HIGHLIGHT_PALETTE) ? parsed.highlight : DEFAULT.highlight,
-    };
+    const raw = await apiGetUi();
+    return normalize(raw);
   } catch {
     return DEFAULT;
   }
 }
 
-export function saveUiPrefs(p: UiPrefs): void {
-  try { localStorage.setItem(KEY, JSON.stringify(p)); } catch { /* localStorage 满或被禁 */ }
+/** 写入后端（成功后后端会 emit_to_all 广播触发各窗 reapply） */
+export async function saveUiPrefs(p: UiPrefs): Promise<void> {
+  await apiSaveUi({ theme: p.theme, accent: p.accent, highlight: p.highlight });
 }
 
 /** 把当前 prefs 应用到 :root —— 设 data-theme + 注入 CSS var */
@@ -65,8 +62,28 @@ export function applyUiPrefs(p: UiPrefs): void {
   const h = HIGHLIGHT_PALETTE[p.highlight];
   root.style.setProperty('--accent',       a.main);
   root.style.setProperty('--accent-hover', a.hover);
-  // dark 走半透明 accent —— 避免浅色蓝 50 在暗底发白
   root.style.setProperty('--accent-bg',    p.theme === 'dark' ? a.bgDark : a.bg);
   root.style.setProperty('--hl-bg',        h.bg);
   root.style.setProperty('--hl-text',      h.text);
+}
+
+/** 一次性 localStorage → 后端 迁移；首次启动新版本时跑一次 */
+export async function migrateLegacyLocalStorage(): Promise<void> {
+  try {
+    const raw = localStorage.getItem(LEGACY_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    const cur = await apiGetUi();
+    // 后端已有非空值时不覆盖（用户已经在新版本里手动设过）
+    if (cur.theme || cur.accent || cur.highlight) {
+      localStorage.removeItem(LEGACY_KEY);
+      return;
+    }
+    await apiSaveUi({
+      theme:     parsed.theme || '',
+      accent:    parsed.accent || '',
+      highlight: parsed.highlight || '',
+    });
+    localStorage.removeItem(LEGACY_KEY);
+  } catch { /* 迁移失败静默；下次保存会覆盖 */ }
 }

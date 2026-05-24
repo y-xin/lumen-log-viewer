@@ -1,11 +1,12 @@
 // 顶部"📂 打开 + ▾"复合按钮：
-// - 左半"📂 打开"：tauri open dialog → loadFile
-// - 右半"▾"：下拉显示最近文件 → 点选直接打开
+// - 左半"📂 打开"：tauri open dialog → 新窗口打开
+// - 右半"▾"：下拉显示最近文件 → 点选在新窗口打开
 
 import { useEffect, useState } from 'react';
-import { openFile, listRecentFiles, clearRecentFiles } from '../api/commands';
-import { openFileViaDialog } from '../api/dialog';
+import { listRecentFiles, clearRecentFiles } from '../api/commands';
+import { open } from '@tauri-apps/plugin-dialog';
 import { useSession } from '../state/session';
+import { openInNewWindow } from '../api/window';
 
 function formatPath(p: string): { name: string; dir: string } {
   const idx = p.lastIndexOf('/');
@@ -14,7 +15,7 @@ function formatPath(p: string): { name: string; dir: string } {
 }
 
 export function OpenFileMenu() {
-  const { loadFile, setError, setLoading, metadata } = useSession();
+  const { metadata } = useSession();
   const [dropOpen, setDropOpen] = useState(false);
   const [recent, setRecent] = useState<string[]>([]);
 
@@ -22,28 +23,29 @@ export function OpenFileMenu() {
     try {
       const list = await listRecentFiles();
       setRecent(list);
-    } catch (e) {
-      setError(typeof e === 'string' ? e : JSON.stringify(e));
+    } catch {
+      // 静默忽略刷新错误
     }
   };
 
   useEffect(() => { refresh(); }, [metadata]);
 
-  const loadByPath = async (path: string) => {
+  // 最近文件点击：在新窗口打开，当前窗口不动
+  const loadByPath = (path: string) => {
     setDropOpen(false);
-    setError(null);
-    try {
-      setLoading(true);
-      const md = await openFile(path);
-      loadFile(md);
-    } catch (e) {
-      setError(`打开失败：${typeof e === 'string' ? e : JSON.stringify(e)}`);
-    } finally {
-      setLoading(false);
-    }
+    openInNewWindow(path).catch(() => {});
   };
 
-  const handleOpenDialog = () => openFileViaDialog({ loadFile, setLoading, setError });
+  // 主按钮：弹 dialog 选文件后在新窗口打开
+  const handleOpenDialog = async () => {
+    const selected = await open({
+      multiple: false,
+      filters: [{ name: 'Log', extensions: ['log', 'jsonl', 'txt'] }],
+    });
+    if (typeof selected === 'string') {
+      openInNewWindow(selected).catch(() => {});
+    }
+  };
 
   const handleClear = async () => {
     if (!confirm('清除最近打开列表？')) return;

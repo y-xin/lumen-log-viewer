@@ -1,12 +1,12 @@
 // 统一设置面板：4 tab — 通用 / 颜色 / 快捷键 / 模板
-// 视觉偏好走 localStorage（applyUiPrefs 注入 :root），字号走 zustand+prefs.json，
+// 视觉偏好走 prefs.json（后端存储，多窗同步），字号走 zustand+prefs.json，
 // 模板入口跳现有 TemplateManagerDialog，快捷键暂只读
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSession } from '../state/session';
 import {
-  loadUiPrefs, saveUiPrefs, applyUiPrefs,
-  ACCENT_PALETTE, HIGHLIGHT_PALETTE,
+  loadUiPrefs, saveUiPrefs,
+  ACCENT_PALETTE, HIGHLIGHT_PALETTE, DEFAULT,
   type UiPrefs, type Theme, type AccentName, type HighlightName,
 } from '../lib/uiPrefs';
 
@@ -22,6 +22,7 @@ const M = isMac ? '⌘' : 'Ctrl';
 
 const SHORTCUT_ROWS: Array<{ keys: string; desc: string }> = [
   { keys: `${M} O`, desc: '打开文件' },
+  { keys: `${M} N`, desc: '新建空白窗口' },
   { keys: `${M} R`, desc: '刷新当前查询' },
   { keys: `${M} F`, desc: '聚焦关键词搜索' },
   { keys: `${M} K`, desc: '清空所有筛选' },
@@ -40,15 +41,18 @@ const SHORTCUT_ROWS: Array<{ keys: string; desc: string }> = [
 
 export function SettingsDialog({ onClose, onOpenTemplateManager }: Props) {
   const [tab, setTab] = useState<Tab>('general');
-  const [ui, setUi] = useState<UiPrefs>(() => loadUiPrefs());
+  const [ui, setUi] = useState<UiPrefs>(DEFAULT);
   const fontSize = useSession((s) => s.fontSize);
+
+  useEffect(() => {
+    loadUiPrefs().then(setUi);
+  }, []);
   const setFontSize = useSession((s) => s.setFontSize);
 
   const updateUi = (patch: Partial<UiPrefs>) => {
     const next = { ...ui, ...patch };
     setUi(next);
-    saveUiPrefs(next);
-    applyUiPrefs(next);
+    saveUiPrefs(next).catch(() => {});
   };
 
   return (

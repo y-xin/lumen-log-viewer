@@ -8,6 +8,7 @@
 import { useEffect } from 'react';
 import { useSession } from '../state/session';
 import { openFileViaDialog } from '../api/dialog';
+import { openBlankWindow } from '../api/window';
 import { getNeighbor } from '../api/commands';
 import type { LogLevel } from '../types/log';
 
@@ -65,6 +66,11 @@ export function useGlobalShortcuts() {
       switch (key) {
         case 'o':
           openFileViaDialog({ loadFile: s.loadFile, setLoading: s.setLoading, setError: s.setError });
+          e.preventDefault();
+          return;
+        case 'n':
+          // ⌘N / Ctrl+N：新建空白窗口
+          openBlankWindow().catch(() => {});
           e.preventDefault();
           return;
         case 'r':

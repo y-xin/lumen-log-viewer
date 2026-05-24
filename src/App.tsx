@@ -16,16 +16,17 @@ import { useTailStatsRefresh } from './hooks/useTailStatsRefresh';
 import { useFileDrop } from './hooks/useFileDrop';
 import { useAutoOpenRecent } from './hooks/useAutoOpenRecent';
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
+import { usePrefsSync } from './hooks/usePrefsSync';
 import { ShortcutsHelp } from './components/ShortcutsHelp';
 import { GotoLineDialog } from './components/GotoLineDialog';
 import { SettingsDialog } from './components/SettingsDialog';
 import { SniffQualityBanner } from './components/SniffQualityBanner';
-import { loadUiPrefs, applyUiPrefs } from './lib/uiPrefs';
+import { loadUiPrefs, applyUiPrefs, migrateLegacyLocalStorage, DEFAULT as UI_DEFAULT } from './lib/uiPrefs';
 import { useEffect as useEffectInit } from 'react';
-import { getFontSize, saveFontSize } from './api/commands';
+import { getFontSize, saveFontSize, openFile } from './api/commands';
 
-// 启动时立即应用 UI 偏好（在 React render 之前生效，避免 light → dark 闪烁）
-applyUiPrefs(loadUiPrefs());
+// 启动时同步应用默认值（避免白屏闪）
+applyUiPrefs(UI_DEFAULT);
 
 export default function App() {
   const { metadata, loading, error } = useSession();
@@ -37,7 +38,17 @@ export default function App() {
   useTailStatsRefresh();
   useAutoOpenRecent();
   useGlobalShortcuts();
+  usePrefsSync();
   const isDragging = useFileDrop();
+
+  // 启动时：迁移历史存储 + 异步拉真实偏好 reapply
+  useEffectInit(() => {
+    (async () => {
+      await migrateLegacyLocalStorage();
+      const p = await loadUiPrefs();
+      applyUiPrefs(p);
+    })();
+  }, []);
 
   // 启动时拉字号偏好；变化时（⌘+/-/0 触发）静默保存
   const fontSize = useSession((s) => s.fontSize);
@@ -51,6 +62,17 @@ export default function App() {
       saveFontSize(fontSize).catch(() => {});
     }
   }, [fontSize]);
+
+  // 多窗口启动：从 URL ?path= 读取初始文件（cmd_open_in_new_window 创建新窗口时拼的 URL）
+  useEffectInit(() => {
+    const params = new URLSearchParams(window.location.search);
+    const initialPath = params.get('path');
+    if (initialPath) {
+      openFile(decodeURIComponent(initialPath))
+        .then((md) => useSession.getState().loadFile(md))
+        .catch(() => {});
+    }
+  }, []);
 
   return (
     <div className="h-screen flex flex-col bg-slate-50 text-slate-900">

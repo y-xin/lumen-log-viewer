@@ -4,7 +4,7 @@
 
 桌面 GUI 日志查看与分析工具（Tauri + React + TypeScript）。代号 `log-viewer`，发布名 **Lumen**。
 
-## 当前状态：Plan 2b + Export + Style v3 + Saved Filters + Shortcuts + Detail Nav + Overnight (13 features) 已完成
+## 当前状态：Plan 2b + Export + Style v3 + Saved Filters + Shortcuts + Detail Nav + Overnight + Multi-Window (14 features) 已完成
 
 **最新视觉规范**：统一 28px 控件高度、Linear/Notion 风格、StatsPanel 瘦身、level 计数下沉到 footer。
 
@@ -28,9 +28,10 @@
 - **文件轮转/截断/删除检测**：弹窗询问重新加载
 - **最近打开文件**：顶部 `▾` 下拉访问最近 10 个文件
 - **拖拽打开**：拖 .log / .jsonl / .txt 文件到窗口任意位置即可打开
+- **多窗口**：每次"打开文件"都是新窗口，同路径自动聚焦已有窗口；⌘N 新建空白；macOS 关到 0 留 dock（⌘Q 通过菜单真退），其他平台关到 0 退出；视觉偏好（主题 / 字号 / accent）与持久化资产（模板 / saved filters / 最近文件）跨窗实时同步
 - **导出筛选结果**：CSV / JSON Lines / JSON Array 三种格式，FilterBar 右侧 📥 菜单触发
 - **保存筛选器**：按文件路径命名保存常用 level/scope/keyword 组合，FilterBar 右侧 📌 菜单一键调出 / 重命名 / 删除
-- **键盘快捷键**：⌘O 打开 / ⌘R 刷新 / ⌘F 聚焦搜索 / ⌘K 清空筛选 / ⌘T 跟踪 / ⌘E 导出 / ⌘S 筛选器 / ? 帮助 / Esc 关闭
+- **键盘快捷键**：⌘O 打开 / ⌘N 新窗口 / ⌘R 刷新 / ⌘F 聚焦搜索 / ⌘K 清空筛选 / ⌘T 跟踪 / ⌘E 导出 / ⌘S 筛选器 / ? 帮助 / Esc 关闭
 - **跨页详情导航 + 关键词高亮**：详情抽屉 ↑/↓ 跨全部 matched entries 跳转 + 显示 "第 X / 共 Y 条匹配"；列表行 / Message / Raw 区按 text_search 命中黄底高亮
 - **多行 entry 展开/折叠**：stack trace 等多行 entry 在表格里行末显示 `▸ N`，点开看完整 raw（单条上限 10 行，更多在详情抽屉 Raw 区）
 - **列宽 / 列显隐持久化**：拖动列宽 + 表头 ⚙ 菜单切换列显示，全部写 prefs.json，下次启动还原

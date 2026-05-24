@@ -6,16 +6,16 @@ use crate::loader::{incremental::IncrementalParser, watcher::{FileWatcher, Rotat
 use crate::model::{FileMetadata, LogEntry, Stats};
 use crate::parser;
 use crate::parser::registry::Registry;
-use crate::prefs::{CustomTemplate, PrefsStore, SavedFilter};
+use crate::prefs::{CustomTemplate, PrefsStore, SavedFilter, UiPrefs};
 use crate::query::{self, QuerySpec};
 use crate::query::neighbor::{NeighborDir, NeighborResponse, PositionResponse};
-use crate::session::SessionState;
+use crate::session_store::SessionStore;
 use crate::stats;
 use serde::{Deserialize, Serialize};
 use std::io::{BufWriter, Write};
 use std::path::Path;
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, State};
 
 #[derive(Serialize)]
 pub struct QueryResponse {
@@ -63,18 +63,36 @@ const BUILTIN_IDS: &[&str] = &[
 
 #[tauri::command]
 pub fn cmd_open_file(
+    window: tauri::Window,
     path: String,
-    state: State<'_, SessionState>,
+    store: State<'_, SessionStore>,
     registry: State<'_, Registry>,
     prefs_store: State<'_, PrefsStore>,
+    app: tauri::AppHandle,
 ) -> Result<FileMetadata, AppError> {
     let lines = reader::read_all_lines(Path::new(&path))?;
     let (entries, template_id, sniff_kind) = parser::parse_with_sniff(&registry, &lines);
     let mut metadata = parser::compute_metadata(&path, &entries, &template_id);
     metadata.sniff_kind = Some(sniff_kind);
-    state.load_with_lines(metadata.clone(), entries, lines);
-    // 成功后记录到最近文件（失败不阻塞）
+
+    let session = store.get_or_create(window.label());
+    session.load_with_lines(metadata.clone(), entries, lines);
+
+    // 注册路径反向索引（用 canonical 路径，便于 lookup_by_path 命中）
+    // canonicalize 失败（如网络盘 / 软链断）时 fallback 原 path，保证聚焦功能能用
+    let path_key = std::fs::canonicalize(&path).unwrap_or_else(|_| std::path::PathBuf::from(&path));
+    store.register_path(path_key, window.label().to_string());
+
+    // 设置窗口标题
+    let title = Path::new(&path).file_name()
+        .map(|n| format!("{} — Lumen", n.to_string_lossy()))
+        .unwrap_or_else(|| "Lumen".to_string());
+    let _ = window.set_title(&title);
+
+    // 成功后记录到最近文件（失败不阻塞）+ 广播
     let _ = prefs_store.record_recent(&path);
+    let _ = app.emit("lv:prefs-changed", "recent_files");
+
     Ok(metadata)
 }
 
@@ -84,25 +102,36 @@ pub fn cmd_list_recent_files(prefs_store: State<'_, PrefsStore>) -> Vec<String> 
 }
 
 #[tauri::command]
-pub fn cmd_clear_recent_files(prefs_store: State<'_, PrefsStore>) -> Result<(), AppError> {
-    prefs_store.clear_recent()
+pub fn cmd_clear_recent_files(
+    app: tauri::AppHandle,
+    prefs_store: State<'_, PrefsStore>,
+) -> Result<(), AppError> {
+    prefs_store.clear_recent()?;
+    let _ = app.emit("lv:prefs-changed", "recent_files");
+    Ok(())
 }
 
 #[tauri::command]
-pub fn cmd_get_metadata(state: State<'_, SessionState>) -> Result<FileMetadata, AppError> {
-    state.metadata()
+pub fn cmd_get_metadata(
+    window: tauri::Window,
+    store: State<'_, SessionStore>,
+) -> Result<FileMetadata, AppError> {
+    let session = store.get(window.label()).ok_or(AppError::NoSession)?;
+    session.metadata()
 }
 
 #[tauri::command]
 pub fn cmd_query(
+    window: tauri::Window,
     spec: QuerySpec,
     page: u32,
     page_size: u32,
-    state: State<'_, SessionState>,
+    store: State<'_, SessionStore>,
 ) -> Result<QueryResponse, AppError> {
-    let matched = query::run_query(&state, &spec)?;
-    let meta = state.metadata()?;
-    let stats = state.with_entries(|entries| {
+    let session = store.get(window.label()).ok_or(AppError::NoSession)?;
+    let matched = query::run_query(&session, &spec)?;
+    let meta = session.metadata()?;
+    let stats = session.with_entries(|entries| {
         let mut s = stats::aggregate(entries, &matched);
         // 时间窗口：用 spec.time_range（若有）否则用文件整体 time_range
         let range = spec.time_range.or(meta.time_range);
@@ -111,7 +140,7 @@ pub fn cmd_query(
         }
         s
     })?;
-    let page_entries = state.with_entries(|entries| {
+    let page_entries = session.with_entries(|entries| {
         let start = (page * page_size) as usize;
         let end = ((page + 1) * page_size) as usize;
         matched
@@ -126,13 +155,15 @@ pub fn cmd_query(
 /// 单独翻页：相同 spec 下高频调用，复用缓存
 #[tauri::command]
 pub fn cmd_get_page(
+    window: tauri::Window,
     spec: QuerySpec,
     page: u32,
     page_size: u32,
-    state: State<'_, SessionState>,
+    store: State<'_, SessionStore>,
 ) -> Result<Vec<LogEntry>, AppError> {
-    let matched = query::run_query(&state, &spec)?;
-    state.with_entries(|entries| {
+    let session = store.get(window.label()).ok_or(AppError::NoSession)?;
+    let matched = query::run_query(&session, &spec)?;
+    session.with_entries(|entries| {
         let start = (page * page_size) as usize;
         let end = ((page + 1) * page_size) as usize;
         matched.iter().skip(start).take(end - start)
@@ -156,22 +187,25 @@ pub fn cmd_list_templates(registry: State<'_, Registry>) -> Vec<TemplateInfo> {
 
 #[tauri::command]
 pub fn cmd_reparse_with_template(
+    window: tauri::Window,
     template_id: String,
-    state: State<'_, SessionState>,
+    store: State<'_, SessionStore>,
     registry: State<'_, Registry>,
 ) -> Result<FileMetadata, AppError> {
-    let lines = state.lines()?;
+    let session = store.get(window.label()).ok_or(AppError::NoSession)?;
+    let lines = session.lines()?;
     let tpl = registry.find(&template_id)
         .ok_or_else(|| AppError::Internal(format!("模板未找到：{template_id}")))?;
     let entries = parser::parse_with_template(tpl.as_parser(), &lines);
-    let old_meta = state.metadata()?;
+    let old_meta = session.metadata()?;
     let metadata = parser::compute_metadata(&old_meta.path, &entries, &template_id);
-    state.load_with_lines(metadata.clone(), entries, lines.to_vec());
+    session.load_with_lines(metadata.clone(), entries, lines.to_vec());
     Ok(metadata)
 }
 
 #[tauri::command]
 pub fn cmd_save_custom_template(
+    app: tauri::AppHandle,
     tpl: CustomTemplate,
     registry: State<'_, Registry>,
     prefs_store: State<'_, PrefsStore>,
@@ -190,6 +224,7 @@ pub fn cmd_save_custom_template(
     prefs.custom_templates.retain(|t| t.id != tpl.id);
     prefs.custom_templates.push(tpl);
     prefs_store.save(&prefs)?;
+    let _ = app.emit("lv:prefs-changed", "templates");
     Ok(())
 }
 
@@ -210,6 +245,7 @@ pub fn cmd_get_custom_template(
 
 #[tauri::command]
 pub fn cmd_delete_custom_template(
+    app: tauri::AppHandle,
     id: String,
     registry: State<'_, Registry>,
     prefs_store: State<'_, PrefsStore>,
@@ -221,6 +257,7 @@ pub fn cmd_delete_custom_template(
     let mut prefs = prefs_store.load();
     prefs.custom_templates.retain(|t| t.id != id);
     prefs_store.save(&prefs)?;
+    let _ = app.emit("lv:prefs-changed", "templates");
     Ok(())
 }
 
@@ -245,12 +282,14 @@ pub struct TestResult {
 
 #[tauri::command]
 pub fn cmd_test_template(
+    window: tauri::Window,
     tpl: CustomTemplate,
     limit: u32,
-    state: State<'_, SessionState>,
+    store: State<'_, SessionStore>,
 ) -> Result<TestResult, AppError> {
+    let session = store.get(window.label()).ok_or(AppError::NoSession)?;
     let rt = crate::prefs::store::compile_custom_template(&tpl)?;
-    let lines = state.lines()?;
+    let lines = session.lines()?;
     let sample_limit = (limit as usize).max(1).min(lines.len());
     let sample = &lines[..sample_limit];
 
@@ -311,12 +350,14 @@ pub fn cmd_test_template(
 
 #[tauri::command]
 pub fn cmd_start_follow(
+    window: tauri::Window,
     app: AppHandle,
-    state: State<'_, SessionState>,
+    store: State<'_, SessionStore>,
     registry: State<'_, Registry>,
 ) -> Result<(), AppError> {
-    if state.is_following() { return Ok(()); }
-    let meta = state.metadata()?;
+    let session = store.get(window.label()).ok_or(AppError::NoSession)?;
+    if session.is_following() { return Ok(()); }
+    let meta = session.metadata()?;
     let path: std::path::PathBuf = meta.path.clone().into();
     let template_id = meta.template_id.clone();
     let tpl_arc = registry.find(&template_id)
@@ -329,12 +370,13 @@ pub fn cmd_start_follow(
     let app_for_append = app.clone();
     let app_for_rotation = app.clone();
     let tpl_arc_for_append = tpl_arc.clone();
+    // 闭包中需要持有 session Arc，避免再走 store 查找
+    let session_for_append = session.clone();
 
     let on_append = Arc::new(move |chunk: String| {
-        let session: State<'_, SessionState> = app_for_append.state();
-        if let Ok(new) = session.feed_chunk(tpl_arc_for_append.as_parser(), &chunk) {
+        if let Ok(new) = session_for_append.feed_chunk(tpl_arc_for_append.as_parser(), &chunk) {
             if !new.is_empty() {
-                let total = session.metadata().map(|m| m.total).unwrap_or(0);
+                let total = session_for_append.metadata().map(|m| m.total).unwrap_or(0);
                 let _ = app_for_append.emit("entries_appended", EntriesAppendedPayload { entries: new, total });
             }
         }
@@ -345,35 +387,39 @@ pub fn cmd_start_follow(
     });
 
     let watcher = FileWatcher::start(path, initial, on_append, on_rotation)?;
-    state.install_watcher(watcher, incremental)?;
+    session.install_watcher(watcher, incremental)?;
     Ok(())
 }
 
 #[tauri::command]
 pub fn cmd_stop_follow(
-    state: State<'_, SessionState>,
+    window: tauri::Window,
+    store: State<'_, SessionStore>,
     registry: State<'_, Registry>,
 ) -> Result<(), AppError> {
-    if !state.is_following() { return Ok(()); }
-    let meta = state.metadata()?;
+    let session = store.get(window.label()).ok_or(AppError::NoSession)?;
+    if !session.is_following() { return Ok(()); }
+    let meta = session.metadata()?;
     if let Some(tpl_arc) = registry.find(&meta.template_id) {
-        let _ = state.flush_incremental(tpl_arc.as_parser());
+        let _ = session.flush_incremental(tpl_arc.as_parser());
     }
-    state.remove_watcher()
+    session.remove_watcher()
 }
 
 #[tauri::command]
 pub fn cmd_export(
+    window: tauri::Window,
     spec: QuerySpec,
     format: ExportFormat,
     path: String,
-    state: State<'_, SessionState>,
+    store: State<'_, SessionStore>,
 ) -> Result<ExportResult, AppError> {
-    let matched = query::run_query(&state, &spec)?;
+    let session = store.get(window.label()).ok_or(AppError::NoSession)?;
+    let matched = query::run_query(&session, &spec)?;
     let file = std::fs::File::create(&path)
         .map_err(|e| AppError::Io(format!("创建导出文件失败：{e}")))?;
     let mut w = BufWriter::new(file);
-    state.with_entries(|entries| -> std::io::Result<()> {
+    session.with_entries(|entries| -> std::io::Result<()> {
         match format {
             ExportFormat::Csv       => crate::export::export_csv(entries, &matched, &mut w),
             ExportFormat::Jsonl     => crate::export::export_jsonl(entries, &matched, &mut w),
@@ -397,51 +443,64 @@ pub fn cmd_list_saved_filters(
 
 #[tauri::command]
 pub fn cmd_save_filter(
+    app: tauri::AppHandle,
     prefs_store: State<'_, PrefsStore>,
     file_path: String,
     filter: SavedFilter,
 ) -> Result<Vec<SavedFilter>, AppError> {
-    prefs_store.save_filter(&file_path, filter)
+    let result = prefs_store.save_filter(&file_path, filter)?;
+    let _ = app.emit("lv:prefs-changed", "saved_filters");
+    Ok(result)
 }
 
 #[tauri::command]
 pub fn cmd_delete_saved_filter(
+    app: tauri::AppHandle,
     prefs_store: State<'_, PrefsStore>,
     file_path: String,
     id: String,
 ) -> Result<Vec<SavedFilter>, AppError> {
-    prefs_store.delete_filter(&file_path, &id)
+    let result = prefs_store.delete_filter(&file_path, &id)?;
+    let _ = app.emit("lv:prefs-changed", "saved_filters");
+    Ok(result)
 }
 
 #[tauri::command]
 pub fn cmd_rename_saved_filter(
+    app: tauri::AppHandle,
     prefs_store: State<'_, PrefsStore>,
     file_path: String,
     id: String,
     new_name: String,
 ) -> Result<Vec<SavedFilter>, AppError> {
-    prefs_store.rename_filter(&file_path, &id, &new_name)
+    let result = prefs_store.rename_filter(&file_path, &id, &new_name)?;
+    let _ = app.emit("lv:prefs-changed", "saved_filters");
+    Ok(result)
 }
 
 // ─── Cross-page Detail Nav ───
 
 #[tauri::command]
 pub fn cmd_get_neighbor(
+    window: tauri::Window,
     spec: QuerySpec,
     line_no: u32,
     dir: NeighborDir,
-    state: State<'_, SessionState>,
+    store: State<'_, SessionStore>,
 ) -> Result<Option<NeighborResponse>, AppError> {
-    query::neighbor::neighbor(&state, &spec, line_no, dir)
+    let session = store.get(window.label()).ok_or(AppError::NoSession)?;
+    query::neighbor::neighbor(&session, &spec, line_no, dir)
 }
 
 #[tauri::command]
 pub fn cmd_get_position(
+    window: tauri::Window,
     spec: QuerySpec,
     line_no: u32,
-    state: State<'_, SessionState>,
+    store: State<'_, SessionStore>,
 ) -> Result<Option<PositionResponse>, AppError> {
-    query::neighbor::position(&state, &spec, line_no)
+    let session = store.get(window.label()).ok_or(AppError::NoSession)?;
+    query::neighbor::position(&session, &spec, line_no)
 }
 
 // ─── UI 偏好（列宽持久化）───
@@ -455,10 +514,13 @@ pub fn cmd_get_column_widths(
 
 #[tauri::command]
 pub fn cmd_save_column_widths(
+    app: tauri::AppHandle,
     prefs_store: State<'_, PrefsStore>,
     widths: std::collections::HashMap<String, u32>,
 ) -> Result<(), AppError> {
-    prefs_store.save_column_widths(widths)
+    prefs_store.save_column_widths(widths)?;
+    let _ = app.emit("lv:prefs-changed", "column_prefs");
+    Ok(())
 }
 
 #[tauri::command]
@@ -470,10 +532,13 @@ pub fn cmd_get_column_visibility(
 
 #[tauri::command]
 pub fn cmd_save_column_visibility(
+    app: tauri::AppHandle,
     prefs_store: State<'_, PrefsStore>,
     visibility: std::collections::HashMap<String, bool>,
 ) -> Result<(), AppError> {
-    prefs_store.save_column_visibility(visibility)
+    prefs_store.save_column_visibility(visibility)?;
+    let _ = app.emit("lv:prefs-changed", "column_prefs");
+    Ok(())
 }
 
 #[tauri::command]
@@ -483,8 +548,77 @@ pub fn cmd_get_font_size(prefs_store: State<'_, PrefsStore>) -> Option<u32> {
 
 #[tauri::command]
 pub fn cmd_save_font_size(
+    app: tauri::AppHandle,
     prefs_store: State<'_, PrefsStore>,
     size: u32,
 ) -> Result<(), AppError> {
-    prefs_store.save_font_size(size)
+    prefs_store.save_font_size(size)?;
+    let _ = app.emit("lv:prefs-changed", "font_size");
+    Ok(())
+}
+
+#[tauri::command]
+pub fn cmd_get_ui_prefs(prefs_store: State<'_, PrefsStore>) -> UiPrefs {
+    prefs_store.get_ui_prefs()
+}
+
+#[tauri::command]
+pub fn cmd_save_ui_prefs(
+    prefs_store: State<'_, PrefsStore>,
+    app: tauri::AppHandle,
+    ui_prefs: UiPrefs,
+) -> Result<(), AppError> {
+    prefs_store.save_ui_prefs(ui_prefs)?;
+    let _ = app.emit("lv:prefs-changed", "ui");
+    Ok(())
+}
+
+/// 统一"打开文件"入口：同路径聚焦已有窗口，否则创建新窗口
+#[tauri::command]
+pub async fn cmd_open_in_new_window(
+    app: tauri::AppHandle,
+    store: State<'_, SessionStore>,
+    path: String,
+) -> Result<(), String> {
+    use tauri::{WebviewUrl, WebviewWindowBuilder, Manager};
+
+    // 规范化路径（canonicalize 失败时 fallback 原 path，与 cmd_open_file 行为一致）
+    let canonical = std::fs::canonicalize(&path)
+        .unwrap_or_else(|_| std::path::PathBuf::from(&path));
+
+    // 查反向索引：已打开就聚焦
+    if let Some(existing_label) = store.lookup_by_path(&canonical) {
+        if let Some(w) = app.get_webview_window(&existing_label) {
+            let _ = w.set_focus();
+            return Ok(());
+        }
+        // label 在反向索引里但窗口已销毁 — 清理后走 fallthrough 开新窗
+        store.close(&existing_label);
+    }
+
+    // 创建新窗口
+    let label = format!("win-{}", uuid::Uuid::new_v4().simple());
+    let canonical_str = canonical.to_string_lossy().into_owned();
+    let encoded_path = urlencoding::encode(&canonical_str);
+    let url = format!("/?path={}", encoded_path);
+    WebviewWindowBuilder::new(&app, &label, WebviewUrl::App(url.into()))
+        .title("Lumen")
+        .inner_size(1200.0, 800.0)
+        .build()
+        .map_err(|e| format!("创建窗口失败: {}", e))?;
+
+    Ok(())
+}
+
+/// 弹空白窗口（⌘N / macOS dock reopen）
+#[tauri::command]
+pub async fn cmd_open_blank_window(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri::{WebviewUrl, WebviewWindowBuilder};
+    let label = format!("win-{}", uuid::Uuid::new_v4().simple());
+    WebviewWindowBuilder::new(&app, &label, WebviewUrl::App("/".into()))
+        .title("Lumen")
+        .inner_size(1200.0, 800.0)
+        .build()
+        .map_err(|e| format!("创建窗口失败: {}", e))?;
+    Ok(())
 }

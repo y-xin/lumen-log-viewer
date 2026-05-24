@@ -2,6 +2,7 @@
 
 import { create } from 'zustand';
 import type { FileMetadata, QuerySpec, QueryResponse, LogLevel, TemplateInfo, LogEntry } from '../types/log';
+import { listTemplates } from '../api/commands';
 
 const ALL_LEVELS: LogLevel[] = ['trace', 'debug', 'info', 'warn', 'error', 'unknown'];
 
@@ -57,6 +58,8 @@ interface SessionStore {
   setGotoOpen: (b: boolean) => void;
   setSettingsOpen: (b: boolean) => void;
   setFontSize: (n: number) => void;
+  /** 重新从后端拉取模板列表并写入 store */
+  refetchTemplates: () => Promise<void>;
 }
 
 export const useSession = create<SessionStore>((set) => ({
@@ -131,4 +134,8 @@ export const useSession = create<SessionStore>((set) => ({
   setGotoOpen: (gotoOpen) => set({ gotoOpen }),
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
   setFontSize: (fontSize) => set({ fontSize: Math.min(20, Math.max(10, fontSize)) }),
+  refetchTemplates: async () => {
+    const list = await listTemplates();
+    set({ templates: list });
+  },
 }));

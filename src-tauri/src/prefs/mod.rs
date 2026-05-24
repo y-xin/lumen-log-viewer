@@ -1,3 +1,3 @@
 pub mod store;
 
-pub use store::{CustomTemplate, PrefsStore, SavedFilter};
+pub use store::{CustomTemplate, Prefs, PrefsStore, SavedFilter, UiPrefs};

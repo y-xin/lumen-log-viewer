@@ -105,10 +105,12 @@ pub fn run() {
             {
                 use tauri::RunEvent;
                 match event {
-                    // 关到 0 窗口时 Tauri 触发 ExitRequested — 一律拦下来留 dock
-                    // 用户主动退出走 menu bar 的 Quit 项（T4.2 注册）
-                    RunEvent::ExitRequested { api, .. } => {
-                        api.prevent_exit();
+                    // 关到 0 窗口时 Tauri 触发 ExitRequested（code=None）— 拦下来留 dock
+                    // 用户显式 app.exit(code) 触发时 code=Some(_)，不拦，让其正常退出
+                    RunEvent::ExitRequested { api, code, .. } => {
+                        if code.is_none() {
+                            api.prevent_exit();
+                        }
                     }
                     // macOS dock 点击（无可见窗口时触发）→ 弹空白窗
                     RunEvent::Reopen { has_visible_windows: false, .. } => {

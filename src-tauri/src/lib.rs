@@ -32,6 +32,30 @@ pub fn run() {
         .manage(SessionStore::new())
         .manage(registry)
         .manage(prefs_store)
+        .menu(|app_handle| {
+            #[cfg(target_os = "macos")]
+            {
+                use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
+                let quit = MenuItemBuilder::with_id("quit", "Quit Lumen")
+                    .accelerator("CmdOrCtrl+Q")
+                    .build(app_handle)?;
+                let app_menu = SubmenuBuilder::new(app_handle, "Lumen")
+                    .item(&quit)
+                    .build()?;
+                let menu = MenuBuilder::new(app_handle).items(&[&app_menu]).build()?;
+                return Ok(menu);
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                // 非 macOS 不需要原生菜单（窗口 close 直接退出）
+                tauri::menu::MenuBuilder::new(app_handle).build()
+            }
+        })
+        .on_menu_event(|app, event| {
+            if event.id().as_ref() == "quit" {
+                app.exit(0);
+            }
+        })
         .on_window_event(|window, event| {
             use tauri::WindowEvent;
             use tauri::Manager;

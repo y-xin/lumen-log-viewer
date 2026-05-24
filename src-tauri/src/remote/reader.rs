@@ -32,34 +32,61 @@ impl RemoteReader {
         let abort_clone = abort.clone();
 
         let handle = tokio::spawn(async move {
-            // MVP：单次连接 — 退避重连留给 Task 4.2
-            let session = match SshSession::connect(&params, default_kh_check()).await {
-                Ok(s) => s,
-                Err(AppError::SshAuthFailed(m)) => { on_disconnect(DisconnectReason::Auth(m)); return; }
-                Err(AppError::HostKeyMismatch { .. }) => { on_disconnect(DisconnectReason::HostKeyChanged); return; }
-                Err(AppError::HostKeyUnknown { .. }) => {
-                    on_disconnect(DisconnectReason::Auth("未信任主机指纹".into()));
-                    return;
-                }
-                Err(e) => { on_disconnect(DisconnectReason::Network(e.to_string())); return; }
-            };
-
-            let mut rx = match session.exec_tail(&remote_path, tail_lines).await {
-                Ok(r) => r,
-                Err(e) => { on_disconnect(DisconnectReason::Network(e.to_string())); return; }
-            };
+            const BACKOFF_MS: [u64; 3] = [1000, 2000, 4000];
+            let mut attempt = 0usize;
             loop {
-                if abort_clone.load(Ordering::Relaxed) { break; }
-                match rx.recv().await {
-                    Some(TailEvent::Chunk(s)) => on_chunk(s),
-                    Some(TailEvent::Stderr(_)) => {} // 暂忽略，未来可前端弹 hint
-                    Some(TailEvent::Closed) | None => {
-                        on_disconnect(DisconnectReason::ServerClosed);
-                        break;
+                if abort_clone.load(Ordering::Relaxed) { return; }
+
+                let connect_result = SshSession::connect(&params, default_kh_check()).await;
+                let session = match connect_result {
+                    Ok(s) => { attempt = 0; s }  // 连接成功重置 backoff
+                    Err(AppError::SshAuthFailed(m)) => {
+                        on_disconnect(DisconnectReason::Auth(m));
+                        return; // 认证失败不重试
+                    }
+                    Err(AppError::HostKeyMismatch { .. }) => {
+                        on_disconnect(DisconnectReason::HostKeyChanged);
+                        return;
+                    }
+                    Err(AppError::HostKeyUnknown { .. }) => {
+                        on_disconnect(DisconnectReason::Auth("未信任主机指纹".into()));
+                        return;
+                    }
+                    Err(e) => {
+                        // 网络错 → 退避重试
+                        if attempt >= BACKOFF_MS.len() {
+                            on_disconnect(DisconnectReason::Network(format!("重连放弃：{e}")));
+                            return;
+                        }
+                        tokio::time::sleep(std::time::Duration::from_millis(BACKOFF_MS[attempt])).await;
+                        attempt += 1;
+                        continue;
+                    }
+                };
+
+                let mut rx = match session.exec_tail(&remote_path, tail_lines).await {
+                    Ok(r) => r,
+                    Err(e) => {
+                        on_disconnect(DisconnectReason::Network(e.to_string()));
+                        session.disconnect().await;
+                        return;
+                    }
+                };
+                loop {
+                    if abort_clone.load(Ordering::Relaxed) {
+                        session.disconnect().await;
+                        return;
+                    }
+                    match rx.recv().await {
+                        Some(TailEvent::Chunk(s)) => on_chunk(s),
+                        Some(TailEvent::Stderr(_)) => {}
+                        Some(TailEvent::Closed) | None => break, // 内层 break → 外层重试连接
                     }
                 }
+                session.disconnect().await;
+                // 走到这里说明 tail 流断了（服务端 EOF），外层 loop 会重新 connect
+                // attempt 不增，因为前一次连接是成功的（只是流断了，可能是 server 重启之类）
             }
-            session.disconnect().await;
         });
 
         Ok(RemoteReader { abort, handle: Some(handle) })

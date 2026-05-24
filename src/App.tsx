@@ -1,4 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { listen } from '@tauri-apps/api/event';
+import { takePendingConnection, openRemoteFile } from './api/remote';
+import { HostKeyDialog } from './components/HostKeyDialog';
 import { OpenFileMenu } from './components/OpenFileMenu';
 import { FilterBar } from './components/FilterBar';
 import { StatsPanel } from './components/StatsPanel';
@@ -74,6 +77,40 @@ export default function App() {
     }
   }, []);
 
+  // SSH host-key 确认弹窗状态
+  const [hostKeyDialog, setHostKeyDialog] = useState<
+    { host: string; port: number; fingerprint: string } | null>(null);
+
+  // mount 时尝试消费 pending connection（cmd_open_remote_in_new_window 流程）
+  useEffect(() => {
+    takePendingConnection().then(async (pending) => {
+      if (!pending) return;
+      try {
+        await openRemoteFile(pending.params, pending.path, pending.tail_lines);
+      } catch (e: any) {
+        // Tauri cmd 抛 AppError 时 e 大致是 { kind, message } 形态
+        const err = e as { kind?: string; message?: any };
+        if (err?.kind === 'HostKeyUnknown' && typeof err.message === 'object') {
+          setHostKeyDialog({
+            host: err.message.host, port: err.message.port,
+            fingerprint: err.message.fingerprint,
+          });
+        } else {
+          console.error('open remote failed', e);
+        }
+      }
+    }).catch((e) => console.error('takePendingConnection failed', e));
+  }, []);
+
+  // 监听后端主动推的 host-key-unknown 事件（RemoteReader 重试中遇到的 case）
+  useEffect(() => {
+    const unlisten = listen<{ host: string; port: number; fingerprint: string }>(
+      'lv:host-key-unknown',
+      ({ payload }) => setHostKeyDialog(payload)
+    );
+    return () => { unlisten.then((f) => f()).catch(() => {}); };
+  }, []);
+
   return (
     <div className="h-screen flex flex-col bg-slate-50 text-slate-900">
       <header className="flex items-center gap-3 px-4 py-2 border-b bg-white">
@@ -119,6 +156,15 @@ export default function App() {
       <RotationDialog />
       <ShortcutsHelp />
       <GotoLineDialog />
+
+      {hostKeyDialog && (
+        <HostKeyDialog
+          host={hostKeyDialog.host}
+          port={hostKeyDialog.port}
+          fingerprint={hostKeyDialog.fingerprint}
+          onClose={() => setHostKeyDialog(null)}
+        />
+      )}
 
       {/* 拖拽文件 overlay：覆盖整个窗口，不阻挡 drag-leave/drop 事件传播 */}
       {isDragging && (

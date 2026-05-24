@@ -74,6 +74,31 @@ pub fn run() {
             commands::cmd_open_in_new_window,
             commands::cmd_open_blank_window,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| {
+            #[cfg(target_os = "macos")]
+            {
+                use tauri::RunEvent;
+                match event {
+                    // 关到 0 窗口时 Tauri 触发 ExitRequested — 一律拦下来留 dock
+                    // 用户主动退出走 menu bar 的 Quit 项（T4.2 注册）
+                    RunEvent::ExitRequested { api, .. } => {
+                        api.prevent_exit();
+                    }
+                    // macOS dock 点击（无可见窗口时触发）→ 弹空白窗
+                    RunEvent::Reopen { has_visible_windows: false, .. } => {
+                        let app = app_handle.clone();
+                        tauri::async_runtime::spawn(async move {
+                            let _ = commands::cmd_open_blank_window(app).await;
+                        });
+                    }
+                    _ => {}
+                }
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                let _ = (app_handle, event); // 静默 unused warning
+            }
+        });
 }

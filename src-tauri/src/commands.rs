@@ -626,6 +626,82 @@ pub async fn cmd_open_blank_window(app: tauri::AppHandle) -> Result<(), String> 
     Ok(())
 }
 
+// ─── Multi-Window Remote ───
+
+/// 远程版"在新窗口打开"：同 URI 已有窗口则聚焦，否则 spawn 新窗口并缓存 pending
+#[tauri::command]
+pub async fn cmd_open_remote_in_new_window(
+    app: tauri::AppHandle,
+    store: State<'_, SessionStore>,
+    params: crate::remote::SshConnectionParams,
+    path: String,
+    tail_lines: usize,
+) -> Result<(), AppError> {
+    use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+
+    // 1. 检查同 URI 是否已有窗口 — 有则聚焦，避免重复打开
+    let source = crate::model::LogSource::Remote {
+        host: params.host.clone(),
+        user: params.user.clone(),
+        port: params.port,
+        path: path.clone(),
+    };
+    let uri = source.to_uri();
+    if let Some(existing_label) = store.lookup_by_uri(&uri) {
+        if let Some(w) = app.get_webview_window(&existing_label) {
+            let _ = w.set_focus();
+            return Ok(());
+        }
+        // label 在索引里但窗口已销毁 — 清理后 fallthrough 开新窗
+        store.close(&existing_label);
+    }
+
+    // 2. 生成新窗口 label，缓存 PendingConnection（5s 内自动清理）
+    let new_label = format!("win-{}", uuid::Uuid::new_v4().simple());
+    store.put_pending(new_label.clone(), crate::session_store::PendingConnection {
+        params,
+        path,
+        tail_lines,
+        created_at: std::time::Instant::now(),
+    });
+
+    // 3. 仅将 label 作为 pending key 放入 URL，secret 不进 URL
+    let url = format!("/?pending={new_label}");
+    WebviewWindowBuilder::new(&app, &new_label, WebviewUrl::App(url.into()))
+        .title("Lumen")
+        .inner_size(1200.0, 800.0)
+        .build()
+        .map_err(|e| AppError::Internal(format!("创建窗口失败：{e}")))?;
+
+    Ok(())
+}
+
+/// 新窗口 mount 后调用：取出并消费 PendingConnection，供前端发起真正的 SSH 连接
+#[tauri::command]
+pub async fn cmd_take_pending_connection(
+    window: tauri::Window,
+    store: State<'_, SessionStore>,
+) -> Result<Option<PendingConnectionPayload>, AppError> {
+    Ok(store.take_pending(window.label()).map(Into::into))
+}
+
+#[derive(serde::Serialize)]
+pub struct PendingConnectionPayload {
+    pub params: crate::remote::SshConnectionParams,
+    pub path: String,
+    pub tail_lines: usize,
+}
+
+impl From<crate::session_store::PendingConnection> for PendingConnectionPayload {
+    fn from(p: crate::session_store::PendingConnection) -> Self {
+        Self {
+            params: p.params,
+            path: p.path,
+            tail_lines: p.tail_lines,
+        }
+    }
+}
+
 // ─── Remote SSH ───
 
 #[tauri::command]

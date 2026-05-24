@@ -100,6 +100,8 @@ pub fn run() {
             commands::cmd_open_blank_window,
             commands::cmd_test_ssh_connection,
             commands::cmd_open_remote_file,
+            commands::cmd_open_remote_in_new_window,
+            commands::cmd_take_pending_connection,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

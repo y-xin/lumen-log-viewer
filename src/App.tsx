@@ -20,13 +20,12 @@ import { ShortcutsHelp } from './components/ShortcutsHelp';
 import { GotoLineDialog } from './components/GotoLineDialog';
 import { SettingsDialog } from './components/SettingsDialog';
 import { SniffQualityBanner } from './components/SniffQualityBanner';
-import { loadUiPrefs, applyUiPrefs, DEFAULT as UI_DEFAULT } from './lib/uiPrefs';
+import { loadUiPrefs, applyUiPrefs, migrateLegacyLocalStorage, DEFAULT as UI_DEFAULT } from './lib/uiPrefs';
 import { useEffect as useEffectInit } from 'react';
 import { getFontSize, saveFontSize } from './api/commands';
 
-// 启动时同步应用默认值（避免白屏闪），再异步从后端拉真实偏好 reapply
+// 启动时同步应用默认值（避免白屏闪）
 applyUiPrefs(UI_DEFAULT);
-loadUiPrefs().then(applyUiPrefs).catch(() => {});
 
 export default function App() {
   const { metadata, loading, error } = useSession();
@@ -39,6 +38,15 @@ export default function App() {
   useAutoOpenRecent();
   useGlobalShortcuts();
   const isDragging = useFileDrop();
+
+  // 启动时：迁移历史存储 + 异步拉真实偏好 reapply
+  useEffectInit(() => {
+    (async () => {
+      await migrateLegacyLocalStorage();
+      const p = await loadUiPrefs();
+      applyUiPrefs(p);
+    })();
+  }, []);
 
   // 启动时拉字号偏好；变化时（⌘+/-/0 触发）静默保存
   const fontSize = useSession((s) => s.fontSize);

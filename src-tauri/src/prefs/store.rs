@@ -44,6 +44,18 @@ pub struct SavedFilter {
     pub text_search: Option<String>,
 }
 
+/// UI 视觉偏好（从前端 localStorage 迁出，跨窗实时同步）
+/// 空字符串表示"未设置" — 前端会 fallback 到 DEFAULT
+#[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct UiPrefs {
+    #[serde(default)]
+    pub theme: String,      // "" | "light" | "dark"
+    #[serde(default)]
+    pub accent: String,     // "" | "blue" | "violet" | "teal" | "rose"
+    #[serde(default)]
+    pub highlight: String,  // "" | "yellow" | "emerald" | "pink" | "sky"
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Prefs {
     pub version: u32,
@@ -67,6 +79,9 @@ pub struct Prefs {
     /// 范围 10-20；None = 默认 12
     #[serde(default)]
     pub font_size: Option<u32>,
+    /// UI 视觉偏好（主题/强调色/高亮色），跨窗口实时同步
+    #[serde(default)]
+    pub ui_prefs: UiPrefs,
 }
 
 const MAX_RECENT_FILES: usize = 10;
@@ -226,6 +241,18 @@ impl PrefsStore {
         self.save(&prefs)?;
         Ok(self.list_filters(file_path))
     }
+
+    /// 读取 UI 视觉偏好（主题/强调色/高亮色）
+    pub fn get_ui_prefs(&self) -> UiPrefs {
+        self.load().ui_prefs
+    }
+
+    /// 保存 UI 视觉偏好（整体覆盖）
+    pub fn save_ui_prefs(&self, ui_prefs: UiPrefs) -> Result<(), AppError> {
+        let mut prefs = self.load();
+        prefs.ui_prefs = ui_prefs;
+        self.save(&prefs)
+    }
 }
 
 impl Prefs {
@@ -238,6 +265,7 @@ impl Prefs {
             column_widths: None,
             column_visibility: None,
             font_size: None,
+            ui_prefs: UiPrefs::default(),
         }
     }
 }
@@ -315,6 +343,7 @@ mod tests {
             column_widths: None,
             column_visibility: None,
             font_size: None,
+            ui_prefs: UiPrefs::default(),
         };
         store.save(&prefs).unwrap();
         let loaded = store.load();
@@ -491,5 +520,28 @@ mod tests {
         assert_eq!(vb.len(), 1);
         assert_eq!(va[0].id, "a");
         assert_eq!(vb[0].id, "b");
+    }
+
+    #[test]
+    fn ui_prefs_round_trip() {
+        let dir = tempdir().unwrap();
+        let store = PrefsStore::at(dir.path().join("prefs.json"));
+        let p = UiPrefs {
+            theme: "dark".into(),
+            accent: "violet".into(),
+            highlight: "emerald".into(),
+        };
+        store.save_ui_prefs(p.clone()).unwrap();
+        assert_eq!(store.get_ui_prefs(), p);
+    }
+
+    #[test]
+    fn legacy_prefs_without_ui_prefs_deserializes_to_default() {
+        // 模拟旧版 prefs.json（无 ui_prefs 字段）
+        let dir = tempdir().unwrap();
+        let legacy_json = r#"{"version":1,"custom_templates":[],"recent_files":[]}"#;
+        std::fs::write(dir.path().join("prefs.json"), legacy_json).unwrap();
+        let store = PrefsStore::at(dir.path().join("prefs.json"));
+        assert_eq!(store.get_ui_prefs(), UiPrefs::default());
     }
 }

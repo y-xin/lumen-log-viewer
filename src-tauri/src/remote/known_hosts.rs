@@ -20,9 +20,61 @@ pub fn default_path() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(".ssh/known_hosts"))
 }
 
+// ─── 输入校验（C1：防 known_hosts 注入） ──────────────────────────────────────
+
+/// SSH key 类型白名单
+const KEY_TYPES: &[&str] = &[
+    "ssh-rsa",
+    "ssh-dss",
+    "ssh-ed25519",
+    "ecdsa-sha2-nistp256",
+    "ecdsa-sha2-nistp384",
+    "ecdsa-sha2-nistp521",
+];
+
+/// host 字段校验：长度 1-253，仅允许 hostname/IPv4/IPv6 合法字符
+/// 拒绝换行、空格、shell metachar — 防止伪造多行 known_hosts entry
+fn validate_host(host: &str) -> Result<(), AppError> {
+    if host.is_empty() || host.len() > 253 {
+        return Err(AppError::Internal("host 长度非法（1-253）".into()));
+    }
+    if !host.bytes().all(|b| matches!(b,
+        b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9'
+        | b'.' | b'-' | b'_' | b':' | b'[' | b']'
+    )) {
+        return Err(AppError::Internal(format!("host 含非法字符：{host:?}")));
+    }
+    Ok(())
+}
+
+/// fingerprint 字段校验：base64 字符集 + 长度上限
+fn validate_fingerprint(fp: &str) -> Result<(), AppError> {
+    if fp.is_empty() || fp.len() > 1024 {
+        return Err(AppError::Internal("fingerprint 长度非法（1-1024）".into()));
+    }
+    if !fp.bytes().all(|b| matches!(b,
+        b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'+' | b'/' | b'='
+    )) {
+        return Err(AppError::Internal("fingerprint 含非 base64 字符".into()));
+    }
+    Ok(())
+}
+
+/// key_type 字段校验：白名单常见 SSH key 类型
+fn validate_key_type(kt: &str) -> Result<(), AppError> {
+    if !KEY_TYPES.contains(&kt) {
+        return Err(AppError::Internal(format!("不支持的 key_type：{kt:?}")));
+    }
+    Ok(())
+}
+
 /// 查 host:port 的指纹是否记录。
 /// `fingerprint` 是 base64 编码的 server pubkey hash。
 pub fn lookup(path: &std::path::Path, host: &str, port: u16, fingerprint: &str) -> KnownHostsLookup {
+    // 防御性校验：非法 host 直接 Unknown（防绕过 append 校验后从 lookup 走回路径）
+    if validate_host(host).is_err() {
+        return KnownHostsLookup::Unknown;
+    }
     if !path.exists() {
         return KnownHostsLookup::Unknown;
     }
@@ -62,6 +114,10 @@ pub fn append(path: &std::path::Path, host: &str, port: u16, key_type: &str, fin
     -> Result<(), AppError>
 {
     use std::io::Write;
+    // C1：写入前严格校验所有入参，避免 known_hosts 注入
+    validate_host(host)?;
+    validate_fingerprint(fingerprint)?;
+    validate_key_type(key_type)?;
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)
             .map_err(|e| AppError::Io(format!("known_hosts 父目录创建失败：{e}")))?;
@@ -126,5 +182,61 @@ mod tests {
         append(&path, "h", 22, "ssh-ed25519", "AAAA").unwrap();
         let content = std::fs::read_to_string(&path).unwrap();
         assert_eq!(content, "h ssh-ed25519 AAAA\n");
+    }
+
+    // ─── C1：注入防护测试 ──────────────────────────────────────────────
+
+    #[test]
+    fn append_rejects_newline_in_host() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("known_hosts");
+        assert!(append(&path, "h\nattacker.com ssh-rsa fake", 22, "ssh-ed25519", "AAAA").is_err());
+    }
+
+    #[test]
+    fn append_rejects_invalid_fingerprint_chars() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("known_hosts");
+        assert!(append(&path, "h", 22, "ssh-ed25519", "fake key with spaces").is_err());
+    }
+
+    #[test]
+    fn append_rejects_unknown_key_type() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("known_hosts");
+        assert!(append(&path, "h", 22, "evil-type-injection\nattacker.com ssh-rsa fake", "AAAA").is_err());
+    }
+
+    #[test]
+    fn append_rejects_empty_host() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("known_hosts");
+        assert!(append(&path, "", 22, "ssh-ed25519", "AAAA").is_err());
+    }
+
+    #[test]
+    fn append_rejects_overlong_host() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("known_hosts");
+        let long = "a".repeat(254);
+        assert!(append(&path, &long, 22, "ssh-ed25519", "AAAA").is_err());
+    }
+
+    #[test]
+    fn append_accepts_ipv6_bracket_notation() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("known_hosts");
+        // IPv6 用 [::1]:22 形式（host 字段含 : 和 [ ]）
+        assert!(append(&path, "[::1]:2222", 2222, "ssh-ed25519", "AAAA").is_ok());
+    }
+
+    #[test]
+    fn lookup_rejects_malicious_host() {
+        // 即使 known_hosts 里有伪造记录，恶意 host 输入也直接 Unknown
+        let f = fixture("evil\nattacker ssh-rsa FAKE\n");
+        assert_eq!(
+            lookup(f.path(), "evil\nattacker", 22, "FAKE"),
+            KnownHostsLookup::Unknown
+        );
     }
 }

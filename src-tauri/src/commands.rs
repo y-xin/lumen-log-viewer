@@ -805,20 +805,33 @@ pub async fn cmd_open_remote_file(
 
 // ── Task 6.4: TOFU 主机密钥确认 ──────────────────────────────────────────────
 
+/// TOFU 行为白名单 — 避免任意字符串入参（C1 防护）
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum HostKeyAction {
+    Trust,
+    SessionOnly,
+}
+
 #[tauri::command]
 pub async fn cmd_confirm_host_key(
     host: String,
     port: u16,
     fingerprint: String,
-    action: String, // "trust" | "session-only"
+    action: HostKeyAction,
 ) -> Result<(), AppError> {
     use crate::remote::known_hosts;
-    if action == "trust" {
-        let path = known_hosts::default_path();
-        // MVP 简化：假设 ed25519 key type — 覆盖绝大多数现代 server
-        known_hosts::append(&path, &host, port, "ssh-ed25519", &fingerprint)?;
+    match action {
+        HostKeyAction::Trust => {
+            let path = known_hosts::default_path();
+            // MVP 简化：假设 ed25519 key type — 覆盖绝大多数现代 server
+            // append 内部严格校验 host / fingerprint / key_type（防注入）
+            known_hosts::append(&path, &host, port, "ssh-ed25519", &fingerprint)?;
+        }
+        HostKeyAction::SessionOnly => {
+            // C2 才接通 session bypass；此处先保持 no-op 以维持原行为
+        }
     }
-    // "session-only" → 不做事；上层连接逻辑会在本次会话内 bypass kh_check
     Ok(())
 }
 

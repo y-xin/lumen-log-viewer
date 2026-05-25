@@ -50,12 +50,15 @@ export async function takePendingConnection(): Promise<PendingConnectionPayload 
   return invoke('cmd_take_pending_connection');
 }
 
+export type HostKeyAction = 'trust' | 'session-only';
+
 export async function confirmHostKey(
   host: string,
   port: number,
   fingerprint: string,
-  action: 'trust' | 'session-only',
+  action: HostKeyAction,
 ): Promise<void> {
+  // 后端使用 #[serde(rename_all = "kebab-case")] enum，'trust' / 'session-only' 直接映射 enum variant
   return invoke('cmd_confirm_host_key', { host, port, fingerprint, action });
 }
 

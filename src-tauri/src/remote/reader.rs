@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::task::JoinHandle;
 use crate::error::AppError;
-use crate::remote::ssh_session::{SshSession, SshConnectionParams, TailEvent, default_kh_check};
+use crate::remote::ssh_session::{SshSession, SshConnectionParams, TailEvent, KhCheck};
 
 pub struct RemoteReader {
     abort: Arc<AtomicBool>,
@@ -17,6 +17,8 @@ pub enum DisconnectReason {
     Network(String),     // 会触发 4.2 退避重连
     Auth(String),        // 不重连
     HostKeyChanged,      // 不重连，安全红线
+    /// 未知主机指纹 — 由上层路由到 TOFU 弹窗，不重连
+    HostKeyUnknown { host: String, port: u16, fingerprint: String },
     ServerClosed,        // 服务端关闭（tail 进程退出）
 }
 
@@ -25,6 +27,7 @@ impl RemoteReader {
         params: SshConnectionParams,
         remote_path: String,
         tail_lines: usize,
+        kh_check: KhCheck,
         on_chunk: Arc<dyn Fn(String) + Send + Sync>,
         on_disconnect: Arc<dyn Fn(DisconnectReason) + Send + Sync>,
     ) -> Result<Self, AppError> {
@@ -37,7 +40,7 @@ impl RemoteReader {
             loop {
                 if abort_clone.load(Ordering::Relaxed) { return; }
 
-                let connect_result = SshSession::connect(&params, default_kh_check()).await;
+                let connect_result = SshSession::connect(&params, kh_check.clone()).await;
                 let session = match connect_result {
                     Ok(s) => { attempt = 0; s }  // 连接成功重置 backoff
                     Err(AppError::SshAuthFailed(m)) => {
@@ -48,8 +51,9 @@ impl RemoteReader {
                         on_disconnect(DisconnectReason::HostKeyChanged);
                         return;
                     }
-                    Err(AppError::HostKeyUnknown { .. }) => {
-                        on_disconnect(DisconnectReason::Auth("未信任主机指纹".into()));
+                    Err(AppError::HostKeyUnknown { host, port, fingerprint }) => {
+                        // 未知主机：单独 variant 让上层弹 TOFU 对话框，不重连
+                        on_disconnect(DisconnectReason::HostKeyUnknown { host, port, fingerprint });
                         return;
                     }
                     Err(e) => {

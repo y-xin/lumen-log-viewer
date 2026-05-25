@@ -9,6 +9,7 @@ import { useSession } from '../state/session';
 import { openInNewWindow } from '../api/window';
 import { OpenRemoteDialog } from './OpenRemoteDialog';
 import { testSshConnection, openRemoteInNewWindow } from '../api/remote';
+import { isSshSupported } from '../lib/platform';
 
 function formatPath(p: string): { name: string; dir: string } {
   const idx = p.lastIndexOf('/');
@@ -21,6 +22,11 @@ export function OpenFileMenu() {
   const [dropOpen, setDropOpen] = useState(false);
   const [recent, setRecent] = useState<string[]>([]);
   const [showRemote, setShowRemote] = useState(false);
+  // 默认 true 避免初始 flash 隐藏；Windows 上异步拿到结果后置 false
+  const [sshSupported, setSshSupported] = useState(true);
+  useEffect(() => {
+    isSshSupported().then(setSshSupported).catch(() => setSshSupported(true));
+  }, []);
 
   const refresh = async () => {
     try {
@@ -67,12 +73,14 @@ export function OpenFileMenu() {
         <>
           <div className="fixed inset-0 z-10" onClick={() => setDropOpen(false)} />
           <div className="absolute top-full left-0 mt-1 w-[28rem] bg-white border rounded shadow-lg z-20 text-sm">
-            <button
-              className="w-full text-left px-3 py-1.5 hover:bg-slate-100 text-sm border-b"
-              onClick={() => { setDropOpen(false); setShowRemote(true); }}
-            >
-              🌐 打开远程文件…
-            </button>
+            {sshSupported && (
+              <button
+                className="w-full text-left px-3 py-1.5 hover:bg-slate-100 text-sm border-b"
+                onClick={() => { setDropOpen(false); setShowRemote(true); }}
+              >
+                🌐 打开远程文件…
+              </button>
+            )}
             <div className="px-3 py-1.5 text-xs text-slate-500 border-b flex items-center justify-between">
               <span>最近打开</span>
               {recent.length > 0 && (

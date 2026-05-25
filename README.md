@@ -4,7 +4,7 @@
 
 桌面 GUI 日志查看与分析工具（Tauri + React + TypeScript）。代号 `log-viewer`，发布名 **Lumen**。
 
-## 当前状态：Plan 2b + Export + Style v3 + Saved Filters + Shortcuts + Detail Nav + Overnight + Multi-Window (14 features) 已完成
+## 当前状态：Plan 2b + Export + Style v3 + Saved Filters + Shortcuts + Detail Nav + Overnight + Multi-Window + Remote-SSH + Updater (16 features) 已完成
 
 **最新视觉规范**：统一 28px 控件高度、Linear/Notion 风格、StatsPanel 瘦身、level 计数下沉到 footer。
 
@@ -30,6 +30,7 @@
 - **拖拽打开**：拖 .log / .jsonl / .txt 文件到窗口任意位置即可打开
 - **多窗口**：每次"打开文件"都是新窗口，同路径自动聚焦已有窗口；⌘N 新建空白；macOS 关到 0 留 dock（⌘Q 通过菜单真退），其他平台关到 0 退出；视觉偏好（主题 / 字号 / accent）与持久化资产（模板 / saved filters / 最近文件）跨窗实时同步
 - **远程日志 (SSH tail)**：通过 SSH 看远程 Linux 服务器日志文件，支持私钥 / 密码认证，known_hosts TOFU，自动退避重连
+- **App 自动升级**：启动 5s 后台检查 GitHub Releases；有新版顶部横幅提示，点击下载装 → atomic replace + 重启
 - **导出筛选结果**：CSV / JSON Lines / JSON Array 三种格式，FilterBar 右侧 📥 菜单触发
 - **保存筛选器**：按文件路径命名保存常用 level/scope/keyword 组合，FilterBar 右侧 📌 菜单一键调出 / 重命名 / 删除
 - **键盘快捷键**：⌘O 打开 / ⌘N 新窗口 / ⌘R 刷新 / ⌘F 聚焦搜索 / ⌘K 清空筛选 / ⌘T 跟踪 / ⌘E 导出 / ⌘S 筛选器 / ? 帮助 / Esc 关闭
@@ -101,6 +102,46 @@ OpenFileMenu → **🌐 打开远程文件…** → 弹 OpenRemoteDialog 填：
 - 远程 server 假设是 Linux + GNU coreutils 的 `tail -F`
 - `~/.ssh/known_hosts` 中 hashed host entry 不识别（按 TOFU 流程当作 unknown 重新接受）
 
+## 下载安装
+
+到 [Releases](https://github.com/y-xin/lumen-log-viewer/releases) 下载对应平台：
+
+### macOS
+
+下载 `Lumen_x.y.z_aarch64.dmg`（Apple Silicon）或 `Lumen_x.y.z_x64.dmg`（Intel）。
+
+**首次安装**：双击 .dmg → 拖 Lumen.app 到 Applications → 双击启动会被 Gatekeeper 拦截（"无法打开，因为无法验证开发者"）。
+
+解决：
+1. **右键** Lumen.app → **打开** → 弹窗里点 **打开** —— 一次后永远 trust
+2. 或终端：`xattr -d com.apple.quarantine /Applications/Lumen.app`
+
+之后版本通过 App 内 updater 自动装无障碍。
+
+### Windows
+
+下载 `Lumen_x.y.z_x64-setup.exe` 或 `Lumen_x.y.z_x64_en-US.msi`。
+
+**首次安装**：双击会被 SmartScreen 拦截（"Windows protected your PC"）。
+
+解决：点 **More info** → **Run anyway** → 安装正常进行。
+
+> **Windows 上的限制**：Remote SSH 功能在 Windows 上**不可用**（v2 适配），OpenFileMenu 不显示"打开远程文件"项。
+
+## 自动升级
+
+Lumen 启动 5s 后静默检查 GitHub Releases 有无新版：
+
+- 有新版 → 顶部横幅 `🎉 Lumen v0.x.x 可用` + 4 按钮：
+  - **看 changelog** — 弹窗显示 release notes
+  - **现在更新** — 下载 → ed25519 签名校验 → atomic replace → 重启
+  - **稍后** — 关闭横幅，下次启动还会出
+  - **跳过此版** — 写 localStorage，直到下一个更新前不再提示
+
+- 也可在 **Settings → 关于 → [检查更新]** 手动触发（不受"跳过此版"影响）
+
+离线 / 网络受限时静默不报错。
+
 ## 已知 MVP 限制
 
 - 文件轮转检测仅 macOS / Linux（依赖 inode）
@@ -109,3 +150,19 @@ OpenFileMenu → **🌐 打开远程文件…** → 弹 OpenRemoteDialog 填：
 ## 未实现
 
 - （暂无 — README 待办已全部交付）
+
+## 发布流程（开发者）
+
+1. 更新 `CHANGELOG.md` 把 `## [Unreleased]` 重命名为 `## [x.y.z] - YYYY-MM-DD`，新建空白 `## [Unreleased]`
+2. `./scripts/bump-version.sh 0.3.0` —— 同步 3 处版本号 + commit + tag
+3. `git push && git push --tags` —— 触发 GitHub Actions
+4. 等 Actions 跑完（约 10-15 分钟），Release 自动出
+5. 现存用户 5 秒后看到 updater 横幅
+
+### 首次发布前 setup
+
+见 [`docs/superpowers/specs/2026-05-25-updater-design.md`](docs/superpowers/specs/2026-05-25-updater-design.md) §10 章节 —— 需配置：
+- ed25519 keypair (`~/.tauri/lumen.key`)
+- self-signed macOS cert 导出为 .p12
+- GitHub Secrets × 5
+- repo Actions 权限：Read and write

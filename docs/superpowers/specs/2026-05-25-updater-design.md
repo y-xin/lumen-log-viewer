@@ -12,12 +12,15 @@
 - 用户点"现在更新" → 下载 → ed25519 签名校验 → atomic replace → 重启
 - 用户点"跳过此版" → 直到下一个新版前不再提示（localStorage 持久化）
 - Settings 加"关于"tab：显示版本 / 构建时间 / commit / [手动检查更新]
-- `git push --tags v0.x.x` 触发 GitHub Actions 自动 build macOS aarch64 + x86_64 + Linux x86_64 三平台 + 自动生成 `latest.json` 上传 Release
+- `git push --tags v0.x.x` 触发 GitHub Actions 自动 build macOS aarch64 + x86_64 + Windows x64 三平台 + 自动生成 `latest.json` 上传 Release
+- Windows 平台 build 但 **Remote SSH 入口隐藏**（remote-ssh spec 已标 Windows 不支持）
 
 ## 2. 非目标
 
 - ❌ Apple Developer 公证（Notarization）—— 用户接受 self-signed cert + 首次右键打开
-- ❌ Windows 平台 build（remote-ssh spec 已明示 v2）
+- ❌ Windows codesigning —— SmartScreen self-signed 仍拦截，付费 EV cert 才免；用户首次看到警告需 "More info → Run anyway"
+- ❌ Linux 平台 build（CI 复杂度高、用户面小，留作 v2）
+- ❌ Remote SSH 在 Windows 上的实际功能（spec 明示 v2；本期仅做前端入口 platform gate）
 - ❌ 自动后台下载新版（"推送式"安装太侵入）
 - ❌ 增量更新 / 差分 patch
 - ❌ 多版本并存 / 灰度发布 / staged rollout
@@ -64,11 +67,13 @@ echo "✅ Bumped to v$VER. Push with: git push && git push --tags"
 ```toml
 # src-tauri/Cargo.toml
 tauri-plugin-updater = "2"
+tauri-plugin-os = "2"             # platform 判断（Remote SSH 入口 gate）
 ```
 
 ```json
 // package.json
-"@tauri-apps/plugin-updater": "^2.0.0"
+"@tauri-apps/plugin-updater": "^2.0.0",
+"@tauri-apps/plugin-os": "^2.0.0"
 ```
 
 ### 4.2 ed25519 签名密钥（一次性 setup）
@@ -109,7 +114,9 @@ npm exec -- @tauri-apps/cli signer generate -w ~/.tauri/lumen.key
     // ...已有...
     "updater:default",
     "updater:allow-check",
-    "updater:allow-download-and-install"
+    "updater:allow-download-and-install",
+    "os:default",
+    "os:allow-platform"
   ]
 }
 ```
@@ -120,6 +127,7 @@ npm exec -- @tauri-apps/cli signer generate -w ~/.tauri/lumen.key
 // src-tauri/src/lib.rs
 tauri::Builder::default()
     .plugin(tauri_plugin_updater::Builder::new().build())
+    .plugin(tauri_plugin_os::init())
     // ...其他 plugin...
 ```
 
@@ -210,7 +218,34 @@ License：MIT
 
 **手动检查不受 `skip-update-version` 影响** —— 即便用户跳过过，手动点也会显示完整信息（这是用户主动行为，应当尊重）。
 
-### 5.4 Build 元数据注入
+### 5.4 Remote SSH 入口 platform gate
+
+加 `src/lib/platform.ts`：
+
+```ts
+import { platform as tauriPlatform } from '@tauri-apps/plugin-os';
+
+let cached: string | null = null;
+
+export async function getPlatform(): Promise<'macos' | 'windows' | 'linux' | string> {
+  if (cached) return cached;
+  cached = await tauriPlatform();
+  return cached;
+}
+
+export async function isSshSupported(): Promise<boolean> {
+  return (await getPlatform()) !== 'windows';
+}
+```
+
+依赖：`@tauri-apps/plugin-os` + 后端 `tauri-plugin-os`。
+
+**改动**：
+- `OpenFileMenu.tsx` mount 时调 `isSshSupported()` → state；为 false 时隐藏 "🌐 打开远程文件…" 项
+- `SettingsDialog.tsx` tab 列表：Windows 隐藏 "远程" tab
+- README "已知限制" 章节明示"Windows 上 Remote SSH 不可用"
+
+### 5.5 Build 元数据注入
 
 `vite.config.ts`：
 
@@ -277,9 +312,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: macos-14,     target: aarch64-apple-darwin }
-          - { os: macos-13,     target: x86_64-apple-darwin }
-          - { os: ubuntu-22.04, target: x86_64-unknown-linux-gnu }
+          - { os: macos-14,       target: aarch64-apple-darwin }
+          - { os: macos-13,       target: x86_64-apple-darwin }
+          - { os: windows-latest, target: x86_64-pc-windows-msvc }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -288,11 +323,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with: { targets: ${{ matrix.target }} }
 
-      - if: matrix.os == 'ubuntu-22.04'
-        run: |
-          sudo apt update
-          sudo apt install -y libwebkit2gtk-4.1-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
-
+      # Windows 不签 — SmartScreen 接受首次警告（用户走 More info → Run anyway）
+      # macOS 走 self-signed cert 临时 keychain
       - if: startsWith(matrix.os, 'macos')
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
@@ -410,8 +442,9 @@ Lumen 用 self-signed cert，不经 Apple Notary 公证 → 用户首次安装�
 | self-signed cert 过期 / rotate | 中 | cert 改 → updater 链断 → 用户需手动重装一次；CHANGELOG 沟通 |
 | 用户停留极老版本 | 低 | prefs migration 已有兜底（multi-window v1 建立机制） |
 | GitHub Release 流量 / 大小 | 低 | 每个 .dmg ~5MB，公开 repo 流量免费 |
-| Linux AppImage 跑不通 | 中 | tauri-action 已成熟，但首发要验证；失败则降级仅 macOS |
-| Windows 用户尝试装 | 低 | release 不提供 Windows binary；README 标明 |
+| Windows SmartScreen 拦截首次启动 | 中 | README "下载安装" Windows 节明示"More info → Run anyway"步骤；updater 后续 atomic replace 不再触发警告 |
+| Windows 上 Remote SSH 入口必须隐藏 | 中 | 前端 `@tauri-apps/plugin-os` 拿 platform，OpenFileMenu / Settings "远程" tab 在 `platform === 'windows'` 时隐藏；漏掉会暴露不能用的入口 |
+| Windows tauri build 首次跑通 | 中 | tauri-action 已支持 windows-latest runner，但首发时人工监督 CI；失败回退仅 macOS |
 | 离线启动报 error | 低 | UpdateBanner catch silently，不弹 toast |
 | 跳过版本后用户想再看 | 低 | Settings 手动检查不受 skip-version 影响 |
 | `latest.json` URL 经 CDN 缓存 | 低 | GitHub Release `download/latest/*` 是直链不缓存 |
@@ -427,12 +460,15 @@ Lumen 用 self-signed cert，不经 Apple Notary 公证 → 用户首次安装�
 
 ### 9.2 手动验收清单
 
-- [ ] 装个 v0.2.0 假版本 → 改 tauri.conf.json version 强制低一档 → 启动应 5s 后弹横幅
+- [ ] macOS：装个 v0.2.0 假版本 → 改 tauri.conf.json version 强制低一档 → 启动应 5s 后弹横幅
 - [ ] 点"跳过此版" → 关闭横幅 → 重启 → 不再提示
 - [ ] Settings → 关于 → [检查更新] 即便跳过过也显示
 - [ ] 装更新成功后 → 应用自动重启 → 版本号刷新到新版
 - [ ] 模拟离线（关 wifi）→ 启动不应有 error toast
 - [ ] CI 跑通整个 workflow → 下载 release .dmg → 装 → 验证 .app 能跑
+- [ ] **Windows**：下载 .msi → SmartScreen 警告 → More info → Run anyway → 装成功
+- [ ] **Windows**：OpenFileMenu 无"🌐 打开远程文件…"项
+- [ ] **Windows**：Settings 无"远程"tab
 
 ### 9.3 CI 验证
 
@@ -468,8 +504,9 @@ Lumen 用 self-signed cert，不经 Apple Notary 公证 → 用户首次安装�
 ## 11. 文档改动
 
 - `README.md` 新增章节：
-  - "下载安装"：链 GitHub Releases + 首次右键打开说明
+  - "下载安装"：链 GitHub Releases；**macOS** 首次右键打开 + xattr quarantine 说明；**Windows** SmartScreen "More info → Run anyway" 步骤
   - "Updater"：自动检查 / 手动检查 / 跳过版本说明
+  - "已知平台限制"：Windows 上 Remote SSH 不可用、Linux 暂无 build
   - "发布流程"（开发者）：bump-version + push tag
 - `CHANGELOG.md`（新建）
 - `SECURITY.md`（新建）
@@ -492,9 +529,11 @@ src-tauri/
 src/
 ├── App.tsx                           (改：渲染 UpdateBanner)
 ├── api/updater.ts                    (新：checkForUpdate / installUpdate)
+├── lib/platform.ts                   (新：getPlatform / isSshSupported helper)
 ├── components/
 │   ├── UpdateBanner.tsx              (新)
-│   └── SettingsDialog.tsx            (改：加 about tab)
+│   ├── OpenFileMenu.tsx              (改：Windows 隐藏「打开远程文件」项)
+│   └── SettingsDialog.tsx            (改：加 about tab + Windows 隐藏 "远程" tab)
 └── vite-env.d.ts                     (改：declare __APP_VERSION__ 等)
 
 vite.config.ts                        (改：define __APP_VERSION__/__BUILD_TIME__/__BUILD_COMMIT__)

@@ -30,6 +30,8 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_os::init())
         // SessionStore 用 Arc 包装管理，方便 cmd 中 clone 给 SSH kh_check 闭包
         .manage(std::sync::Arc::new(SessionStore::new()))
         .manage(registry)

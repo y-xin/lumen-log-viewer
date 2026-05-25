@@ -22,9 +22,19 @@
       "csp": null
     }
   },
+  "plugins": {
+    "updater": {
+      "active": true,
+      "endpoints": [
+        "https://github.com/y-xin/lumen-log-viewer/releases/latest/download/latest.json"
+      ],
+      "pubkey": "RWQJvSgf3DradCvdJwfQtbyhWm3IcJa6AN7kfMGzQdEVAGn5+m0IU88S",
+      "dialog": false
+    }
+  },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["dmg", "app", "msi", "nsis"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

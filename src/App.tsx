@@ -24,6 +24,7 @@ import { ShortcutsHelp } from './components/ShortcutsHelp';
 import { GotoLineDialog } from './components/GotoLineDialog';
 import { SettingsDialog } from './components/SettingsDialog';
 import { SniffQualityBanner } from './components/SniffQualityBanner';
+import { UpdateBanner } from './components/UpdateBanner';
 import { loadUiPrefs, applyUiPrefs, migrateLegacyLocalStorage, DEFAULT as UI_DEFAULT } from './lib/uiPrefs';
 import { useEffect as useEffectInit } from 'react';
 import { getFontSize, saveFontSize, openFile } from './api/commands';
@@ -158,6 +159,7 @@ export default function App() {
           {metadata ? metadata.path : '未打开文件'}
         </div>
       </header>
+      <UpdateBanner />
       {error && (
         <div className="px-4 py-2 text-sm text-red-700 bg-red-50 border-b border-red-200">{error}</div>
       )}

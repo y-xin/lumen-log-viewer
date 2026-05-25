@@ -3,12 +3,30 @@
 
 import { useState, useEffect } from 'react';
 import { useRemoteSession } from '../state/remoteSession';
-import { listSshHosts, type SshConnectionParams } from '../api/remote';
+import { confirmHostKey, listSshHosts, type SshConnectionParams } from '../api/remote';
+
+interface HostKeyUnknownInfo {
+  host: string;
+  port: number;
+  fingerprint: string;
+}
+
+/**
+ * onTest 返回值：
+ * - ok=true → 测试成功
+ * - ok=false + hostKeyUnknown → 未知主机指纹，由 dialog 弹 inline TOFU 确认 UI
+ * - ok=false + error → 其他错误，红条显示
+ */
+export interface TestResult {
+  ok: boolean;
+  error?: string;
+  hostKeyUnknown?: HostKeyUnknownInfo;
+}
 
 interface Props {
   onClose: () => void;
   onSubmit: (params: SshConnectionParams, path: string, tailLines: number) => void;
-  onTest: (params: SshConnectionParams) => Promise<{ ok: boolean; error?: string }>;
+  onTest: (params: SshConnectionParams) => Promise<TestResult>;
 }
 
 export function OpenRemoteDialog({ onClose, onSubmit, onTest }: Props) {
@@ -23,6 +41,8 @@ export function OpenRemoteDialog({ onClose, onSubmit, onTest }: Props) {
   const [remember, setRemember] = useState(false);
   const [tailLines, setTailLines] = useState(5000);
   const [testResult, setTestResult] = useState<string | null>(null);
+  // 未知主机指纹弹窗（inline，避免遮盖父 dialog 上下文）
+  const [hostKeyPrompt, setHostKeyPrompt] = useState<HostKeyUnknownInfo | null>(null);
 
   // host 变化时自动 prefill 已知 SSH 主机配置
   useEffect(() => {
@@ -122,8 +142,16 @@ export function OpenRemoteDialog({ onClose, onSubmit, onTest }: Props) {
 
         <div className="flex justify-between">
           <button className="ctl" disabled={!valid} onClick={async () => {
+            setTestResult(null);
             const r = await onTest(buildParams());
-            setTestResult(r.ok ? '✅ 连接成功' : `❌ ${r.error}`);
+            if (r.ok) {
+              setTestResult('✅ 连接成功');
+            } else if (r.hostKeyUnknown) {
+              // 未知指纹 — 弹 inline TOFU 让用户选 trust / session-only / reject
+              setHostKeyPrompt(r.hostKeyUnknown);
+            } else {
+              setTestResult(`❌ ${r.error ?? '未知错误'}`);
+            }
           }}>测试连接</button>
           <div className="flex gap-2">
             <button className="ctl" onClick={onClose}>取消</button>
@@ -138,6 +166,45 @@ export function OpenRemoteDialog({ onClose, onSubmit, onTest }: Props) {
             }}>连接</button>
           </div>
         </div>
+
+        {hostKeyPrompt && (
+          <div className="mt-4 border-t pt-3">
+            <h4 className="text-xs font-semibold text-amber-700 mb-1">⚠ 未知主机指纹</h4>
+            <p className="text-xs text-slate-600 mb-2">
+              <code className="bg-slate-100 px-1 rounded">{hostKeyPrompt.host}:{hostKeyPrompt.port}</code> 不在 known_hosts
+            </p>
+            <div className="bg-slate-50 border rounded p-2 mb-2 font-mono text-[11px] break-all">
+              {hostKeyPrompt.fingerprint}
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button className="ctl" onClick={() => setHostKeyPrompt(null)}>拒绝</button>
+              <button className="ctl" onClick={async () => {
+                try {
+                  await confirmHostKey(hostKeyPrompt.host, hostKeyPrompt.port,
+                    hostKeyPrompt.fingerprint, 'session-only');
+                  setHostKeyPrompt(null);
+                  // 自动重试测试 —— 此时 bypass 表已记录
+                  const r = await onTest(buildParams());
+                  setTestResult(r.ok ? '✅ 连接成功' : `❌ ${r.error ?? '重试失败'}`);
+                } catch (e) {
+                  setTestResult(`❌ 记录失败：${String(e)}`);
+                }
+              }}>仅本次</button>
+              <button className="ctl ctl-primary" onClick={async () => {
+                try {
+                  await confirmHostKey(hostKeyPrompt.host, hostKeyPrompt.port,
+                    hostKeyPrompt.fingerprint, 'trust');
+                  setHostKeyPrompt(null);
+                  // 自动重试测试 —— 此时 known_hosts 已记录
+                  const r = await onTest(buildParams());
+                  setTestResult(r.ok ? '✅ 连接成功' : `❌ ${r.error ?? '重试失败'}`);
+                } catch (e) {
+                  setTestResult(`❌ 写入 known_hosts 失败：${String(e)}`);
+                }
+              }}>信任并保存</button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

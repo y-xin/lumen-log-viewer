@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { listen } from '@tauri-apps/api/event';
-import { takePendingConnection, openRemoteFile } from './api/remote';
+import { takePendingConnection, openRemoteFile, type SshConnectionParams } from './api/remote';
 import { HostKeyDialog } from './components/HostKeyDialog';
 import { OpenFileMenu } from './components/OpenFileMenu';
 import { FilterBar } from './components/FilterBar';
@@ -80,6 +80,12 @@ export default function App() {
   // SSH host-key 确认弹窗状态
   const [hostKeyDialog, setHostKeyDialog] = useState<
     { host: string; port: number; fingerprint: string } | null>(null);
+  // 缓存"等待确认 host-key 后需要重试的连接参数" — trust/session-only 后 retry
+  const pendingRetryRef = useRef<{
+    params: SshConnectionParams;
+    path: string;
+    tailLines: number;
+  } | null>(null);
 
   // mount 时尝试消费 pending connection（cmd_open_remote_in_new_window 流程）
   useEffect(() => {
@@ -91,6 +97,12 @@ export default function App() {
         // Tauri cmd 抛 AppError 时 e 大致是 { kind, message } 形态
         const err = e as { kind?: string; message?: any };
         if (err?.kind === 'HostKeyUnknown' && typeof err.message === 'object') {
+          // 缓存原始连接参数 — dialog 关闭时根据用户选择决定 retry
+          pendingRetryRef.current = {
+            params: pending.params,
+            path: pending.path,
+            tailLines: pending.tail_lines,
+          };
           setHostKeyDialog({
             host: err.message.host, port: err.message.port,
             fingerprint: err.message.fingerprint,
@@ -110,6 +122,20 @@ export default function App() {
     );
     return () => { unlisten.then((f) => f()).catch(() => {}); };
   }, []);
+
+  // host-key dialog 关闭回调：confirmed=true（trust/session-only）时 retry openRemoteFile
+  const handleHostKeyDialogClose = async (confirmed: boolean) => {
+    const retry = pendingRetryRef.current;
+    pendingRetryRef.current = null;
+    setHostKeyDialog(null);
+    if (confirmed && retry) {
+      try {
+        await openRemoteFile(retry.params, retry.path, retry.tailLines);
+      } catch (e) {
+        console.error('retry openRemoteFile failed', e);
+      }
+    }
+  };
 
   return (
     <div className="h-screen flex flex-col bg-slate-50 text-slate-900">
@@ -162,7 +188,7 @@ export default function App() {
           host={hostKeyDialog.host}
           port={hostKeyDialog.port}
           fingerprint={hostKeyDialog.fingerprint}
-          onClose={() => setHostKeyDialog(null)}
+          onClose={handleHostKeyDialogClose}
         />
       )}
 

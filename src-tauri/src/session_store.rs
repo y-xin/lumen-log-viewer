@@ -10,6 +10,9 @@ pub struct SessionStore {
     sessions: DashMap<String, Arc<SessionState>>,
     path_to_label: DashMap<String, String>,  // key = LogSource::to_uri()
     pending_connections: DashMap<String, PendingConnection>,
+    /// "仅本次"接受的主机指纹 — 进程退出即清空；不写盘
+    /// key = (host, port), value = base64 fingerprint
+    session_bypasses: DashMap<(String, u16), String>,
 }
 
 impl SessionStore {
@@ -75,6 +78,21 @@ impl SessionStore {
     pub fn sweep_stale_pending(&self) {
         let now = std::time::Instant::now();
         self.pending_connections.retain(|_, v| now.duration_since(v.created_at).as_secs() < 5);
+    }
+
+    /// "仅本次"信任：记录 (host, port) → fingerprint 到内存。
+    /// 只对本次进程生命周期有效，绝不落盘。
+    pub fn add_session_bypass(&self, host: String, port: u16, fingerprint: String) {
+        self.session_bypasses.insert((host, port), fingerprint);
+    }
+
+    /// 查 (host, port, fingerprint) 是否已被"仅本次"接受。
+    /// 必须三元组完全匹配才返回 true — 防止 fingerprint 漂移后误放行。
+    pub fn is_bypassed(&self, host: &str, port: u16, fingerprint: &str) -> bool {
+        self.session_bypasses
+            .get(&(host.to_string(), port))
+            .map(|fp| fp.as_str() == fingerprint)
+            .unwrap_or(false)
     }
 }
 
@@ -157,6 +175,16 @@ mod tests {
             "win-b operation blocked: {:?}", elapsed);
 
         h1.join().unwrap();
+    }
+
+    #[test]
+    fn session_bypass_matches_only_on_exact_tuple() {
+        let store = SessionStore::new();
+        store.add_session_bypass("h".into(), 22, "FP".into());
+        assert!(store.is_bypassed("h", 22, "FP"));
+        assert!(!store.is_bypassed("h", 22, "OTHER"));
+        assert!(!store.is_bypassed("h", 23, "FP"));
+        assert!(!store.is_bypassed("h2", 22, "FP"));
     }
 
     #[test]

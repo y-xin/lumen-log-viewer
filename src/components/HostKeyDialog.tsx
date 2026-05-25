@@ -4,7 +4,11 @@ interface Props {
   host: string;
   port: number;
   fingerprint: string;
-  onClose: () => void;
+  /**
+   * confirmed=true 表示用户选了 trust / session-only —— 上层应 retry 之前的连接动作；
+   * confirmed=false 表示拒绝，不重试。
+   */
+  onClose: (confirmed: boolean) => void;
 }
 
 export function HostKeyDialog({ host, port, fingerprint, onClose }: Props) {
@@ -20,14 +24,24 @@ export function HostKeyDialog({ host, port, fingerprint, onClose }: Props) {
         </div>
         <p className="text-xs text-slate-600 mb-3">是否信任并保存？</p>
         <div className="flex gap-2 justify-end">
-          <button className="ctl" onClick={onClose}>拒绝</button>
+          <button className="ctl" onClick={() => onClose(false)}>拒绝</button>
           <button className="ctl" onClick={async () => {
-            await confirmHostKey(host, port, fingerprint, 'session-only');
-            onClose();
+            try {
+              await confirmHostKey(host, port, fingerprint, 'session-only');
+              onClose(true);
+            } catch (e) {
+              console.error('confirmHostKey session-only failed', e);
+              onClose(false);
+            }
           }}>仅本次</button>
           <button className="ctl ctl-primary" onClick={async () => {
-            await confirmHostKey(host, port, fingerprint, 'trust');
-            onClose();
+            try {
+              await confirmHostKey(host, port, fingerprint, 'trust');
+              onClose(true);
+            } catch (e) {
+              console.error('confirmHostKey trust failed', e);
+              onClose(false);
+            }
           }}>信任并保存</button>
         </div>
       </div>

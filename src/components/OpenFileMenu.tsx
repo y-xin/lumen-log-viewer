@@ -112,6 +112,12 @@ export function OpenFileMenu() {
         onTest={async (params) => {
           try { await testSshConnection(params); return { ok: true }; }
           catch (e: unknown) {
+            // Tauri AppError 序列化为 { kind, message }；HostKeyUnknown 的 message 是 { host, port, fingerprint }
+            const err = e as { kind?: string; message?: unknown };
+            if (err?.kind === 'HostKeyUnknown' && err.message && typeof err.message === 'object') {
+              const m = err.message as { host: string; port: number; fingerprint: string };
+              return { ok: false, hostKeyUnknown: m };
+            }
             const msg = e instanceof Error ? e.message : String(e);
             return { ok: false, error: msg };
           }

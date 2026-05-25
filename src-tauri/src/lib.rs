@@ -30,7 +30,8 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .manage(SessionStore::new())
+        // SessionStore 用 Arc 包装管理，方便 cmd 中 clone 给 SSH kh_check 闭包
+        .manage(std::sync::Arc::new(SessionStore::new()))
         .manage(registry)
         .manage(prefs_store)
         .menu(|app_handle| {
@@ -61,7 +62,7 @@ pub fn run() {
             use tauri::WindowEvent;
             use tauri::Manager;
             if let WindowEvent::CloseRequested { .. } = event {
-                let store: tauri::State<session_store::SessionStore> = window.state();
+                let store: tauri::State<std::sync::Arc<session_store::SessionStore>> = window.state();
                 store.close(window.label());
             }
         })

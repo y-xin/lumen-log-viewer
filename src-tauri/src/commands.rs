@@ -66,7 +66,7 @@ const BUILTIN_IDS: &[&str] = &[
 pub fn cmd_open_file(
     window: tauri::Window,
     path: String,
-    store: State<'_, SessionStore>,
+    store: State<'_, Arc<SessionStore>>,
     registry: State<'_, Registry>,
     prefs_store: State<'_, PrefsStore>,
     app: tauri::AppHandle,
@@ -116,7 +116,7 @@ pub fn cmd_clear_recent_files(
 #[tauri::command]
 pub fn cmd_get_metadata(
     window: tauri::Window,
-    store: State<'_, SessionStore>,
+    store: State<'_, Arc<SessionStore>>,
 ) -> Result<FileMetadata, AppError> {
     let session = store.get(window.label()).ok_or(AppError::NoSession)?;
     session.metadata()
@@ -128,7 +128,7 @@ pub fn cmd_query(
     spec: QuerySpec,
     page: u32,
     page_size: u32,
-    store: State<'_, SessionStore>,
+    store: State<'_, Arc<SessionStore>>,
 ) -> Result<QueryResponse, AppError> {
     let session = store.get(window.label()).ok_or(AppError::NoSession)?;
     let matched = query::run_query(&session, &spec)?;
@@ -161,7 +161,7 @@ pub fn cmd_get_page(
     spec: QuerySpec,
     page: u32,
     page_size: u32,
-    store: State<'_, SessionStore>,
+    store: State<'_, Arc<SessionStore>>,
 ) -> Result<Vec<LogEntry>, AppError> {
     let session = store.get(window.label()).ok_or(AppError::NoSession)?;
     let matched = query::run_query(&session, &spec)?;
@@ -191,7 +191,7 @@ pub fn cmd_list_templates(registry: State<'_, Registry>) -> Vec<TemplateInfo> {
 pub fn cmd_reparse_with_template(
     window: tauri::Window,
     template_id: String,
-    store: State<'_, SessionStore>,
+    store: State<'_, Arc<SessionStore>>,
     registry: State<'_, Registry>,
 ) -> Result<FileMetadata, AppError> {
     let session = store.get(window.label()).ok_or(AppError::NoSession)?;
@@ -287,7 +287,7 @@ pub fn cmd_test_template(
     window: tauri::Window,
     tpl: CustomTemplate,
     limit: u32,
-    store: State<'_, SessionStore>,
+    store: State<'_, Arc<SessionStore>>,
 ) -> Result<TestResult, AppError> {
     let session = store.get(window.label()).ok_or(AppError::NoSession)?;
     let rt = crate::prefs::store::compile_custom_template(&tpl)?;
@@ -354,7 +354,7 @@ pub fn cmd_test_template(
 pub fn cmd_start_follow(
     window: tauri::Window,
     app: AppHandle,
-    store: State<'_, SessionStore>,
+    store: State<'_, Arc<SessionStore>>,
     registry: State<'_, Registry>,
 ) -> Result<(), AppError> {
     let session = store.get(window.label()).ok_or(AppError::NoSession)?;
@@ -396,7 +396,7 @@ pub fn cmd_start_follow(
 #[tauri::command]
 pub fn cmd_stop_follow(
     window: tauri::Window,
-    store: State<'_, SessionStore>,
+    store: State<'_, Arc<SessionStore>>,
     registry: State<'_, Registry>,
 ) -> Result<(), AppError> {
     let session = store.get(window.label()).ok_or(AppError::NoSession)?;
@@ -414,7 +414,7 @@ pub fn cmd_export(
     spec: QuerySpec,
     format: ExportFormat,
     path: String,
-    store: State<'_, SessionStore>,
+    store: State<'_, Arc<SessionStore>>,
 ) -> Result<ExportResult, AppError> {
     let session = store.get(window.label()).ok_or(AppError::NoSession)?;
     let matched = query::run_query(&session, &spec)?;
@@ -488,7 +488,7 @@ pub fn cmd_get_neighbor(
     spec: QuerySpec,
     line_no: u32,
     dir: NeighborDir,
-    store: State<'_, SessionStore>,
+    store: State<'_, Arc<SessionStore>>,
 ) -> Result<Option<NeighborResponse>, AppError> {
     let session = store.get(window.label()).ok_or(AppError::NoSession)?;
     query::neighbor::neighbor(&session, &spec, line_no, dir)
@@ -499,7 +499,7 @@ pub fn cmd_get_position(
     window: tauri::Window,
     spec: QuerySpec,
     line_no: u32,
-    store: State<'_, SessionStore>,
+    store: State<'_, Arc<SessionStore>>,
 ) -> Result<Option<PositionResponse>, AppError> {
     let session = store.get(window.label()).ok_or(AppError::NoSession)?;
     query::neighbor::position(&session, &spec, line_no)
@@ -579,7 +579,7 @@ pub fn cmd_save_ui_prefs(
 #[tauri::command]
 pub async fn cmd_open_in_new_window(
     app: tauri::AppHandle,
-    store: State<'_, SessionStore>,
+    store: State<'_, Arc<SessionStore>>,
     path: String,
 ) -> Result<(), String> {
     use tauri::{WebviewUrl, WebviewWindowBuilder, Manager};
@@ -632,7 +632,7 @@ pub async fn cmd_open_blank_window(app: tauri::AppHandle) -> Result<(), String> 
 #[tauri::command]
 pub async fn cmd_open_remote_in_new_window(
     app: tauri::AppHandle,
-    store: State<'_, SessionStore>,
+    store: State<'_, Arc<SessionStore>>,
     params: crate::remote::SshConnectionParams,
     path: String,
     tail_lines: usize,
@@ -680,7 +680,7 @@ pub async fn cmd_open_remote_in_new_window(
 #[tauri::command]
 pub async fn cmd_take_pending_connection(
     window: tauri::Window,
-    store: State<'_, SessionStore>,
+    store: State<'_, Arc<SessionStore>>,
 ) -> Result<Option<PendingConnectionPayload>, AppError> {
     Ok(store.take_pending(window.label()).map(Into::into))
 }
@@ -706,11 +706,14 @@ impl From<crate::session_store::PendingConnection> for PendingConnectionPayload 
 
 #[tauri::command]
 pub async fn cmd_test_ssh_connection(
+    store: State<'_, Arc<SessionStore>>,
     params: crate::remote::ssh_session::SshConnectionParams,
 ) -> Result<(), AppError> {
+    // 用带 bypass 的 kh_check：让"仅本次"接受过的指纹在测试时也放行
+    let store_arc = (*store).clone();
     crate::remote::ssh_session::SshSession::test_only(
         &params,
-        crate::remote::ssh_session::default_kh_check(),
+        crate::remote::ssh_session::default_kh_check_with_bypass(store_arc),
     )
     .await
 }
@@ -719,7 +722,7 @@ pub async fn cmd_test_ssh_connection(
 pub async fn cmd_open_remote_file(
     window: tauri::Window,
     app: AppHandle,
-    store: State<'_, SessionStore>,
+    store: State<'_, Arc<SessionStore>>,
     registry: State<'_, Registry>,
     params: crate::remote::SshConnectionParams,
     path: String,
@@ -779,11 +782,21 @@ pub async fn cmd_open_remote_file(
     let on_disc: Arc<dyn Fn(crate::remote::DisconnectReason) + Send + Sync> =
         Arc::new(move |reason| {
             use crate::remote::DisconnectReason;
+            // HostKeyUnknown 走独立事件 —— 触发前端 TOFU 弹窗（C2 修复）
+            if let DisconnectReason::HostKeyUnknown { host, port, fingerprint } = reason {
+                let _ = app_for_disc.emit_to(
+                    &label_for_disc,
+                    "lv:host-key-unknown",
+                    serde_json::json!({ "host": host, "port": port, "fingerprint": fingerprint }),
+                );
+                return;
+            }
             let (kind, message, will_retry) = match reason {
                 DisconnectReason::Network(m)  => ("network", m, true),
                 DisconnectReason::Auth(m)     => ("auth", m, false),
                 DisconnectReason::HostKeyChanged => ("host-key-changed", String::new(), false),
                 DisconnectReason::ServerClosed   => ("server-closed", String::new(), true),
+                DisconnectReason::HostKeyUnknown { .. } => unreachable!(), // 已在上面处理
             };
             let _ = app_for_disc.emit_to(
                 &label_for_disc,
@@ -792,7 +805,8 @@ pub async fn cmd_open_remote_file(
             );
         });
 
-    let reader = crate::remote::RemoteReader::start(params, path, tail_lines, on_chunk, on_disc)?;
+    let kh_check = crate::remote::ssh_session::default_kh_check_with_bypass((*store).clone());
+    let reader = crate::remote::RemoteReader::start(params, path, tail_lines, kh_check, on_chunk, on_disc)?;
 
     // 6. IncrementalParser 起始行号从 1 开始（远程 tail 全新流）
     let incremental = IncrementalParser::new(1);
@@ -805,7 +819,7 @@ pub async fn cmd_open_remote_file(
 
 // ── Task 6.4: TOFU 主机密钥确认 ──────────────────────────────────────────────
 
-/// TOFU 行为白名单 — 避免任意字符串入参（C1 防护）
+/// TOFU 行为白名单 — 避免任意字符串入参（C1 修复）
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum HostKeyAction {
@@ -815,6 +829,7 @@ pub enum HostKeyAction {
 
 #[tauri::command]
 pub async fn cmd_confirm_host_key(
+    store: State<'_, Arc<SessionStore>>,
     host: String,
     port: u16,
     fingerprint: String,
@@ -825,11 +840,12 @@ pub async fn cmd_confirm_host_key(
         HostKeyAction::Trust => {
             let path = known_hosts::default_path();
             // MVP 简化：假设 ed25519 key type — 覆盖绝大多数现代 server
-            // append 内部严格校验 host / fingerprint / key_type（防注入）
+            // append 内部会严格校验 host / fingerprint / key_type（防注入）
             known_hosts::append(&path, &host, port, "ssh-ed25519", &fingerprint)?;
         }
         HostKeyAction::SessionOnly => {
-            // C2 才接通 session bypass；此处先保持 no-op 以维持原行为
+            // 写入内存 bypass 表 —— 进程内有效，重试连接时 kh_check 会查表放行
+            store.add_session_bypass(host, port, fingerprint);
         }
     }
     Ok(())

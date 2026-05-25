@@ -261,6 +261,37 @@ pub fn default_kh_check() -> KhCheck {
     })
 }
 
+/// 带"仅本次"放行的 kh_check：优先查 SessionStore 内存表，命中则放行；
+/// 否则走标准 known_hosts 流程。
+pub fn default_kh_check_with_bypass(store: Arc<crate::session_store::SessionStore>) -> KhCheck {
+    Arc::new(move |host, port, pk| {
+        let fp_b64 = pk.public_key_base64();
+        if fp_b64.is_empty() {
+            return Err(AppError::Internal("无法读取服务端公钥".into()));
+        }
+        // 优先查 session bypass 表（"仅本次"信任）
+        if store.is_bypassed(host, port, &fp_b64) {
+            return Ok(());
+        }
+        // 再查 known_hosts
+        let path = known_hosts::default_path();
+        match known_hosts::lookup(&path, host, port, &fp_b64) {
+            KnownHostsLookup::Match => Ok(()),
+            KnownHostsLookup::Unknown => Err(AppError::HostKeyUnknown {
+                host: host.into(),
+                port,
+                fingerprint: fp_b64,
+            }),
+            KnownHostsLookup::Mismatch { expected } => Err(AppError::HostKeyMismatch {
+                host: host.into(),
+                port,
+                expected,
+                actual: fp_b64,
+            }),
+        }
+    })
+}
+
 // ─── 单元测试 ─────────────────────────────────────────────────────────────────
 #[cfg(test)]
 mod tests {

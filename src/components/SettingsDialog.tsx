@@ -10,6 +10,7 @@ import {
   type UiPrefs, type Theme, type AccentName, type HighlightName,
 } from '../lib/uiPrefs';
 import { listSshHosts, deleteSshHost, type SshHostConfig } from '../api/remote';
+import { isSshSupported } from '../lib/platform';
 
 interface Props {
   onClose: () => void;
@@ -44,10 +45,20 @@ export function SettingsDialog({ onClose, onOpenTemplateManager }: Props) {
   const [tab, setTab] = useState<Tab>('general');
   const [ui, setUi] = useState<UiPrefs>(DEFAULT);
   const fontSize = useSession((s) => s.fontSize);
+  // 默认 true 避免初始 flash 隐藏；Windows 异步拿到结果后置 false
+  const [sshSupported, setSshSupported] = useState(true);
 
   useEffect(() => {
     loadUiPrefs().then(setUi);
   }, []);
+  useEffect(() => {
+    isSshSupported().then(setSshSupported).catch(() => setSshSupported(true));
+  }, []);
+  // Windows 上若当前停在 remote tab，自动切回 general
+  useEffect(() => {
+    if (!sshSupported && tab === 'remote') setTab('general');
+  }, [sshSupported, tab]);
+
   const setFontSize = useSession((s) => s.setFontSize);
 
   const updateUi = (patch: Partial<UiPrefs>) => {
@@ -74,7 +85,7 @@ export function SettingsDialog({ onClose, onOpenTemplateManager }: Props) {
             ['shortcuts', '快捷键'],
             ['templates', '模板'],
             ['remote',    '远程'],
-          ] as const).map(([k, label]) => (
+          ] as const).filter(([k]) => k !== 'remote' || sshSupported).map(([k, label]) => (
             <button
               key={k}
               onClick={() => setTab(k)}
@@ -184,7 +195,7 @@ export function SettingsDialog({ onClose, onOpenTemplateManager }: Props) {
               </>
             )}
 
-            {tab === 'remote' && <RemoteSettingsTab />}
+            {tab === 'remote' && sshSupported && <RemoteSettingsTab />}
           </div>
         </section>
       </div>

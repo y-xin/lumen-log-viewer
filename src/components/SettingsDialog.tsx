@@ -1,4 +1,4 @@
-// 统一设置面板：5 tab — 通用 / 颜色 / 快捷键 / 模板 / 远程
+// 统一设置面板：6 tab — 通用 / 颜色 / 快捷键 / 模板 / 远程 / 关于
 // 视觉偏好走 prefs.json（后端存储，多窗同步），字号走 zustand+prefs.json，
 // 模板入口跳现有 TemplateManagerDialog，快捷键暂只读
 
@@ -11,13 +11,14 @@ import {
 } from '../lib/uiPrefs';
 import { listSshHosts, deleteSshHost, type SshHostConfig } from '../api/remote';
 import { isSshSupported } from '../lib/platform';
+import { checkForUpdate } from '../api/updater';
 
 interface Props {
   onClose: () => void;
   onOpenTemplateManager: () => void;
 }
 
-type Tab = 'general' | 'colors' | 'shortcuts' | 'templates' | 'remote';
+type Tab = 'general' | 'colors' | 'shortcuts' | 'templates' | 'remote' | 'about';
 
 const isMac = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform);
 const M = isMac ? '⌘' : 'Ctrl';
@@ -85,6 +86,7 @@ export function SettingsDialog({ onClose, onOpenTemplateManager }: Props) {
             ['shortcuts', '快捷键'],
             ['templates', '模板'],
             ['remote',    '远程'],
+            ['about',     '关于'],
           ] as const).filter(([k]) => k !== 'remote' || sshSupported).map(([k, label]) => (
             <button
               key={k}
@@ -111,6 +113,7 @@ export function SettingsDialog({ onClose, onOpenTemplateManager }: Props) {
               {tab === 'shortcuts' && '快捷键'}
               {tab === 'templates' && '解析模板'}
               {tab === 'remote' && '远程 SSH'}
+              {tab === 'about' && '关于'}
             </h3>
             <button onClick={onClose} className="text-slate-500 hover:text-slate-700">✕</button>
           </header>
@@ -196,6 +199,8 @@ export function SettingsDialog({ onClose, onOpenTemplateManager }: Props) {
             )}
 
             {tab === 'remote' && sshSupported && <RemoteSettingsTab />}
+
+            {tab === 'about' && <AboutTab />}
           </div>
         </section>
       </div>
@@ -254,6 +259,53 @@ function SwatchRow({
           <span>{opt.label}</span>
         </button>
       ))}
+    </div>
+  );
+}
+
+// 关于 tab：版本信息 + 手动检查更新
+function AboutTab() {
+  const [checking, setChecking] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+
+  const onCheck = async () => {
+    setChecking(true);
+    setResult(null);
+    try {
+      const u = await checkForUpdate();
+      setResult(u
+        ? `🎉 v${u.version} 可用（关闭设置 → 顶部横幅有"现在更新"按钮）`
+        : '✅ 已是最新版本'
+      );
+    } catch (e: any) {
+      setResult(`❌ 检查失败：${e?.message ?? String(e)}`);
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3 text-sm">
+      <div className="border rounded p-3 space-y-1.5">
+        <div className="font-semibold">Lumen — 日志查看与分析</div>
+        <div className="text-xs text-slate-600">
+          <div>当前版本：<span className="font-mono">v{__APP_VERSION__}</span></div>
+          <div>构建时间：<span className="font-mono">{__BUILD_TIME__}</span></div>
+          <div>Commit：<span className="font-mono">{__BUILD_COMMIT__}</span></div>
+        </div>
+      </div>
+
+      <div>
+        <button className="ctl ctl-primary" disabled={checking} onClick={onCheck}>
+          {checking ? '检查中…' : '检查更新'}
+        </button>
+        {result && <div className="mt-2 text-xs">{result}</div>}
+      </div>
+
+      <div className="text-xs text-slate-500">
+        源码：<span className="font-mono">https://github.com/y-xin/log-viewer</span>
+        <br />License：MIT
+      </div>
     </div>
   );
 }

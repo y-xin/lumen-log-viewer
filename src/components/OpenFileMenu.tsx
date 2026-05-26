@@ -10,11 +10,16 @@ import { openInNewWindow } from '../api/window';
 import { OpenRemoteDialog } from './OpenRemoteDialog';
 import { testSshConnection, openRemoteInNewWindow } from '../api/remote';
 import { isSshSupported } from '../lib/platform';
+import { toLocalPath } from '../types/log';
 
-function formatPath(p: string): { name: string; dir: string } {
-  const idx = p.lastIndexOf('/');
-  if (idx < 0) return { name: p, dir: '' };
-  return { name: p.slice(idx + 1), dir: p.slice(0, idx) };
+function formatPath(uriOrPath: string): { name: string; dir: string; isRemote: boolean } {
+  // recent 列表里可能是 file:///abs/path（Task 1.4 migration 后）、ssh://user@host:port/path、或旧裸路径
+  const isRemote = uriOrPath.startsWith('ssh://');
+  // 展示用：file:// 前缀去掉看着干净；ssh:// 保留 host 信息
+  const display = uriOrPath.startsWith('file://') ? uriOrPath.slice('file://'.length) : uriOrPath;
+  const idx = display.lastIndexOf('/');
+  if (idx < 0) return { name: display, dir: '', isRemote };
+  return { name: display.slice(idx + 1), dir: display.slice(0, idx), isRemote };
 }
 
 export function OpenFileMenu() {
@@ -40,9 +45,16 @@ export function OpenFileMenu() {
   useEffect(() => { refresh(); }, [metadata]);
 
   // 最近文件点击：在新窗口打开，当前窗口不动
-  const loadByPath = (path: string) => {
+  // 入参可能是 file:///abs/path（migration 后的标准格式）或 ssh://...（远程）或旧裸路径
+  const loadByPath = (uriOrPath: string) => {
     setDropOpen(false);
-    openInNewWindow(path).catch(() => {});
+    const localPath = toLocalPath(uriOrPath);
+    if (localPath === null) {
+      // ssh:// 远程文件：MVP 先提示用户手动重开（passphrase 没存盘，无法直接打开）
+      alert('远程文件需要重新输入密码，请用「🌐 打开远程文件…」入口手动连接。');
+      return;
+    }
+    openInNewWindow(localPath).catch((e) => console.error('openInNewWindow failed', e));
   };
 
   // 主按钮：弹 dialog 选文件后在新窗口打开

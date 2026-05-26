@@ -200,3 +200,17 @@ export function logSourceDisplayName(s: LogSource): string {
   if (s.kind === 'local') return filename(s.path);
   return `${filename(s.path)} (${s.user}@${s.host})`;
 }
+
+/**
+ * 把 prefs 里的 source key（可能是 file:///abs/path、ssh://... 或旧裸路径）
+ * 转成本地 fs 路径。ssh:// 之类的远程 URI 返回 null —— 调用方应单独走 OpenRemoteDialog。
+ *
+ * Task 1.4 prefs migration 把所有裸路径升级成了 file:/// URI，但
+ * cmd_open_file / cmd_open_in_new_window 等后端 cmd 仍只接 raw 路径；
+ * 所有从 prefs 拿出来的 path 在调后端前都要走这个 helper。
+ */
+export function toLocalPath(uriOrPath: string): string | null {
+  if (uriOrPath.startsWith('file://')) return uriOrPath.slice('file://'.length);
+  if (uriOrPath.startsWith('ssh://')) return null;
+  return uriOrPath; // 兼容旧 prefs 或测试场景里的裸路径
+}

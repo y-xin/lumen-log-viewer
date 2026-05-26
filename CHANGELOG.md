@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-05-25
+
+### Fixed
+- "打开文件" / 启动自动打开最近 在 v0.3.0 上空白窗口的 regression：Task 1.4
+  prefs migration 把 `recent_files` 升级成 `file:///abs/path` URI 形式，但前端
+  OpenFileMenu / useAutoOpenRecent 仍把 URI 当 raw path 传后端 → 加载失败。
+  修复加 toLocalPath helper 在调后端前解 URI 为 fs 路径。
+- 最近文件下拉里若是 `ssh://` 远程项，点击会提示用户走 "打开远程文件…" 重新输入
+  密码（passphrase 不持久化，无法静默重连）。
+- spawn 的新窗口里 useAutoOpenRecent 不再和 URL `?path=` 流程赛跑。
+
 ## [0.3.0] - 2026-05-25
 
 ### Added

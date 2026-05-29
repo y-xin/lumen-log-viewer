@@ -46,7 +46,18 @@ pub fn run() {
                 let app_menu = SubmenuBuilder::new(app_handle, "Lumen")
                     .item(&quit)
                     .build()?;
-                let menu = MenuBuilder::new(app_handle).items(&[&app_menu]).build()?;
+                let edit_menu = SubmenuBuilder::new(app_handle, "Edit")
+                    .undo()
+                    .redo()
+                    .separator()
+                    .cut()
+                    .copy()
+                    .paste()
+                    .select_all()
+                    .build()?;
+                let menu = MenuBuilder::new(app_handle)
+                    .items(&[&app_menu, &edit_menu])
+                    .build()?;
                 return Ok(menu);
             }
             #[cfg(not(target_os = "macos"))]

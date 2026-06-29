@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-29
+
+### Added
+- 详情面板支持停靠位置切换（右侧 / 底部）：挤压列表而非浮层遮挡，选择持久化到
+  prefs.json 并跨窗实时同步。
+- 日志列表 Message + Fields 列支持横向滚动查看：左侧 行号/时间/级别/Scope 列冻结，
+  超长内容不再被截断；Message 列宽可拖拽调整。
+- 详情面板复制扩展：Message、Fields（整体 / 单字段）均可一键复制，并带"已复制"反馈。
+
+### Fixed
+- 详情面板复制在 macOS 上点击无反应：navigator.clipboard 在 WKWebView 下常失败且被
+  静默吞掉，改为优先 navigator.clipboard、失败回退临时 textarea + execCommand('copy')
+  的可靠路径（与已恢复的原生 Edit 菜单同一条复制链路）。
+
 ## [0.3.1] - 2026-05-25
 
 ### Fixed

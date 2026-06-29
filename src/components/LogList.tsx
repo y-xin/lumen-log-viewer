@@ -1,7 +1,8 @@
 // 虚拟列表：滚动到第 N 页边界时按需 fetch 下一页
 // 列：行号 / 时间 / level / scope / message+fields（可拖动调整 4 个边界）
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
 import { VariableSizeList as List, ListChildComponentProps, ListOnItemsRenderedProps } from 'react-window';
 import { getPage, getColumnWidths, saveColumnWidths, getColumnVisibility, saveColumnVisibility } from '../api/commands';
 import { useSession } from '../state/session';
@@ -39,15 +40,18 @@ const FOOTER_LEVEL_COLOR: Record<LogLevel, string> = {
 };
 
 // 可拖动列：默认宽度 + 最小宽度
+// ColKey 是可显隐的左侧固定列；message 也可拖宽但永远显示、不参与显隐菜单。
 type ColKey = 'line' | 'time' | 'level' | 'scope';
+type WidthKey = ColKey | 'message';
 const COL_LABELS: Record<ColKey, string> = {
   line: '行号', time: '时间', level: '级别', scope: 'Scope',
 };
-const DEFAULT_WIDTHS: Record<ColKey, number> = {
+const DEFAULT_WIDTHS: Record<WidthKey, number> = {
   line: 70,
   time: 180,
   level: 56,
   scope: 160,
+  message: 1200,   // Message+Fields 列宽（横向滚动区）：默认很宽，可拖拽调整
 };
 const DEFAULT_VISIBILITY: Record<ColKey, boolean> = {
   line: true, time: true, level: true, scope: true,
@@ -145,7 +149,7 @@ export function LogList() {
   const listH = Math.max(0, containerHeight - STATUS_BAR_HEIGHT);
 
   // ─── 列宽（可拖动 + 持久化到 prefs.json） ────────────────────────────────────
-  const [widths, setWidths] = useState<Record<ColKey, number>>(DEFAULT_WIDTHS);
+  const [widths, setWidths] = useState<Record<WidthKey, number>>(DEFAULT_WIDTHS);
 
   // 启动时拉一次列宽偏好
   useEffect(() => {
@@ -154,8 +158,8 @@ export function LogList() {
       .then((saved) => {
         if (cancelled || !saved) return;
         // 只覆盖识别的 key，未知 key 丢弃
-        const next: Record<ColKey, number> = { ...DEFAULT_WIDTHS };
-        (Object.keys(DEFAULT_WIDTHS) as ColKey[]).forEach((k) => {
+        const next: Record<WidthKey, number> = { ...DEFAULT_WIDTHS };
+        (Object.keys(DEFAULT_WIDTHS) as WidthKey[]).forEach((k) => {
           const v = saved[k];
           if (typeof v === 'number' && v >= MIN_WIDTH) next[k] = v;
         });
@@ -202,7 +206,7 @@ export function LogList() {
   };
   const [colMenuOpen, setColMenuOpen] = useState(false);
 
-  const startResize = (col: ColKey, e: React.MouseEvent) => {
+  const startResize = (col: WidthKey, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     const startX = e.clientX;
@@ -220,6 +224,27 @@ export function LogList() {
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
   };
+
+  // ─── 横向滚动（冻结左列 + Message 区横滚） ──────────────────────────────
+  // 左侧固定列总宽（仅累加可见列）；message 列宽固定、可拖，超出窗口时整体横滚。
+  const leftWidth =
+    (visibility.line ? widths.line : 0) +
+    (visibility.time ? widths.time : 0) +
+    (visibility.level ? widths.level : 0) +
+    (visibility.scope ? widths.scope : 0);
+  const totalWidth = leftWidth + widths.message;
+  // react-window 默认 inner 宽 100%、不产生横向滚动。用 innerElementType 把 inner 的
+  // minWidth 撑到 totalWidth → List 的滚动容器(outer, overflow:auto)出现横向滚动条；
+  // 行内左列用 position:sticky left:0 冻结。用 ref 读 totalWidth，避免每次拖动重建组件
+  // 导致 inner 重挂载闪烁。
+  const totalWidthRef = useRef(totalWidth);
+  totalWidthRef.current = totalWidth;
+  const InnerEl = useMemo(
+    () => forwardRef<HTMLDivElement, { style: CSSProperties }>(function Inner({ style, ...rest }, ref) {
+      return <div ref={ref} style={{ ...style, minWidth: totalWidthRef.current }} {...rest} />;
+    }),
+    [],
+  );
 
   // ─── 数据加载 ──────────────────────────────────────────
   // spec 变化 → 重置（清空再注入首页）；spec 没变 + result 引用变 → smart merge：
@@ -359,12 +384,8 @@ export function LogList() {
     const fieldsTxt = formatFields(e.fields);
     const messageTxt = e.message || e.raw;
     const combined = fieldsTxt ? `${messageTxt}    ${fieldsTxt}` : messageTxt;
-    // 展开块左侧缩进对齐到 message 列起点（仅累加可见列宽）
-    const expandedIndent =
-      (visibility.line ? widths.line : 0) +
-      (visibility.time ? widths.time : 0) +
-      (visibility.level ? widths.level : 0) +
-      (visibility.scope ? widths.scope : 0) + 8;
+    // 展开块左侧缩进对齐到 message 列起点（冻结组 pl-2 = 8）
+    const expandedIndent = leftWidth + 8;
     // 展开块裁掉 raw 首行 + 可能截断到上限
     let restRaw = restOfRaw(e.raw);
     const restLines = restRaw ? restRaw.split('\n') : [];
@@ -395,6 +416,9 @@ export function LogList() {
       );
     }
 
+    // 冻结列 / 多行按钮的不透明背景（横滚时盖住下方文字）。
+    // hover 态 ≈ 默认态(slate-50)，故无需单独 hover 变体。
+    const frozenBg = isSelected ? 'bg-blue-50' : (inSameTrace ? 'bg-emerald-50' : 'bg-slate-50');
     return (
       <div
         style={{ ...style, fontSize }}
@@ -406,35 +430,39 @@ export function LogList() {
           isSelected ? 'bg-blue-50' : (inSameTrace ? 'bg-emerald-50' : 'hover:bg-slate-50'),
         ].join(' ')}
       >
-        <div className="px-2 flex items-stretch gap-0" style={{ height: ROW_HEIGHT }}>
-          {visibility.line && (
-            <span style={{ width: widths.line }} className="flex items-center text-slate-400 text-right justify-end pr-2">
-              {lineLabel(e)}
-            </span>
-          )}
-          {visibility.time && (
-            <span style={{ width: widths.time }} className="flex items-center text-slate-500 truncate px-2">
-              {fmtRowTime(e.timestamp)}
-            </span>
-          )}
-          {visibility.level && (
-            <span style={{ width: widths.level }} className={['flex items-center uppercase px-2', LEVEL_COLOR[e.level]].join(' ')}>
-              {e.level}
-            </span>
-          )}
-          {visibility.scope && (
-            <span style={{ width: widths.scope }} className="flex items-center text-slate-600 truncate px-2">
-              {e.scope ?? '-'}
-            </span>
-          )}
-          <span className="flex-1 flex items-center truncate px-2" title={combined}>
+        <div className="flex items-stretch gap-0" style={{ height: ROW_HEIGHT }}>
+          {/* 冻结左列：sticky left:0 + 不透明背景，横滚时固定不动 */}
+          <div className={['sticky left-0 z-10 flex items-stretch pl-2', frozenBg].join(' ')}>
+            {visibility.line && (
+              <span style={{ width: widths.line }} className="flex items-center text-slate-400 text-right justify-end pr-2">
+                {lineLabel(e)}
+              </span>
+            )}
+            {visibility.time && (
+              <span style={{ width: widths.time }} className="flex items-center text-slate-500 truncate px-2">
+                {fmtRowTime(e.timestamp)}
+              </span>
+            )}
+            {visibility.level && (
+              <span style={{ width: widths.level }} className={['flex items-center uppercase px-2', LEVEL_COLOR[e.level]].join(' ')}>
+                {e.level}
+              </span>
+            )}
+            {visibility.scope && (
+              <span style={{ width: widths.scope }} className="flex items-center text-slate-600 truncate px-2">
+                {e.scope ?? '-'}
+              </span>
+            )}
+          </div>
+          {/* Message+Fields：不换行，超出靠横向滚动查看（不再 truncate 截断） */}
+          <span className="flex-1 flex items-center whitespace-nowrap overflow-hidden px-2" title={combined}>
             <HighlightedText text={combined} needle={spec.text_search ?? ''} />
           </span>
           {isMultiline && (
             <button
               onMouseDown={(ev) => { ev.stopPropagation(); }}
               onClick={(ev) => { ev.stopPropagation(); toggleExpand(e.line_no); }}
-              className="text-slate-400 hover:text-slate-700 px-2 self-stretch flex items-center"
+              className={['sticky right-0 z-10 text-slate-400 hover:text-slate-700 px-2 self-stretch flex items-center', frozenBg].join(' ')}
               title={isExpanded ? `折叠（${e.line_count} 行）` : `展开（${e.line_count} 行）`}
             >
               {isExpanded ? '▾' : '▸'} {e.line_count}
@@ -491,7 +519,8 @@ export function LogList() {
           <Resizer onMouseDown={(e) => startResize('scope', e)} />
         </>
       )}
-      <div className="flex-1 flex items-center px-2 py-1">Message + Fields</div>
+      <div className="flex-1 flex items-center px-2 py-1 whitespace-nowrap overflow-hidden">Message + Fields</div>
+      <Resizer onMouseDown={(e) => startResize('message', e)} />
       <button
         onClick={() => setColMenuOpen((v) => !v)}
         className="px-2 text-slate-400 hover:text-slate-700"
@@ -533,6 +562,8 @@ export function LogList() {
           itemSize={getItemSize}
           estimatedItemSize={ROW_HEIGHT}
           width="100%"
+          // 普通模式：自定义 inner 撑宽出横向滚动条；rawMode 单列不需要
+          innerElementType={rawMode ? undefined : InnerEl}
           onItemsRendered={onItemsRendered}
         >
           {Row}

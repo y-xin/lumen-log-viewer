@@ -108,6 +108,8 @@ pub fn run() {
             commands::cmd_save_column_visibility,
             commands::cmd_get_font_size,
             commands::cmd_save_font_size,
+            commands::cmd_get_detail_dock,
+            commands::cmd_save_detail_dock,
             commands::cmd_get_ui_prefs,
             commands::cmd_save_ui_prefs,
             commands::cmd_open_in_new_window,

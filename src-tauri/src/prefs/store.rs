@@ -88,6 +88,9 @@ pub struct Prefs {
     /// 范围 10-20；None = 默认 12
     #[serde(default)]
     pub font_size: Option<u32>,
+    /// UI 偏好：详情面板停靠位置（"right" | "bottom"），None = 默认 right
+    #[serde(default)]
+    pub detail_dock: Option<String>,
     /// UI 视觉偏好（主题/强调色/高亮色），跨窗口实时同步
     #[serde(default)]
     pub ui_prefs: UiPrefs,
@@ -201,6 +204,18 @@ impl PrefsStore {
         self.save(&prefs)
     }
 
+    /// 读详情面板停靠位置；未保存返回 None（前端用默认 right）
+    pub fn get_detail_dock(&self) -> Option<String> {
+        self.load().detail_dock
+    }
+
+    /// 写详情面板停靠位置（"right" | "bottom"）
+    pub fn save_detail_dock(&self, dock: String) -> Result<(), AppError> {
+        let mut prefs = self.load();
+        prefs.detail_dock = Some(dock);
+        self.save(&prefs)
+    }
+
     /// 列出某文件下的所有保存筛选，按 created_at 倒序（最新在前）
     pub fn list_filters(&self, file_path: &str) -> Vec<SavedFilter> {
         let prefs = self.load();
@@ -300,6 +315,7 @@ impl Prefs {
             column_widths: None,
             column_visibility: None,
             font_size: None,
+            detail_dock: None,
             ui_prefs: UiPrefs::default(),
             ssh_hosts: HashMap::new(),
         }
@@ -408,6 +424,7 @@ mod tests {
             column_widths: None,
             column_visibility: None,
             font_size: None,
+            detail_dock: None,
             ui_prefs: UiPrefs::default(),
             ssh_hosts: HashMap::new(),
         };
@@ -600,6 +617,15 @@ mod tests {
         };
         store.save_ui_prefs(p.clone()).unwrap();
         assert_eq!(store.get_ui_prefs(), p);
+    }
+
+    #[test]
+    fn detail_dock_round_trip() {
+        let dir = tempdir().unwrap();
+        let store = PrefsStore::at(dir.path().join("prefs.json"));
+        assert_eq!(store.get_detail_dock(), None);
+        store.save_detail_dock("bottom".into()).unwrap();
+        assert_eq!(store.get_detail_dock(), Some("bottom".to_string()));
     }
 
     #[test]

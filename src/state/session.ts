@@ -33,6 +33,8 @@ interface SessionStore {
   settingsOpen: boolean;
   /** 日志内容字号（LogList row + DetailDrawer Message/Raw），px */
   fontSize: number;
+  /** 详情面板停靠位置：'right' 右侧 / 'bottom' 底部 */
+  detailDock: 'right' | 'bottom';
 
   /**
    * 打开新文件用：把 metadata 写入，同时清空 spec / result / 选中行 / 待追加计数。
@@ -58,6 +60,7 @@ interface SessionStore {
   setGotoOpen: (b: boolean) => void;
   setSettingsOpen: (b: boolean) => void;
   setFontSize: (n: number) => void;
+  setDetailDock: (d: 'right' | 'bottom') => void;
   /** 重新从后端拉取模板列表并写入 store */
   refetchTemplates: () => Promise<void>;
 }
@@ -80,6 +83,7 @@ export const useSession = create<SessionStore>((set) => ({
   gotoOpen: false,
   settingsOpen: false,
   fontSize: 12,
+  detailDock: 'right',
 
   loadFile: (m) => set({
     metadata: m,
@@ -134,6 +138,7 @@ export const useSession = create<SessionStore>((set) => ({
   setGotoOpen: (gotoOpen) => set({ gotoOpen }),
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
   setFontSize: (fontSize) => set({ fontSize: Math.min(20, Math.max(10, fontSize)) }),
+  setDetailDock: (detailDock) => set({ detailDock }),
   refetchTemplates: async () => {
     const list = await listTemplates();
     set({ templates: list });

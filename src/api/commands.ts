@@ -171,6 +171,15 @@ export async function saveFontSize(size: number): Promise<void> {
   return invoke<void>('cmd_save_font_size', { size });
 }
 
+/** 详情面板停靠位置："right" | "bottom"；未保存返回 null（前端用默认 right） */
+export async function getDetailDock(): Promise<string | null> {
+  return invoke<string | null>('cmd_get_detail_dock');
+}
+
+export async function saveDetailDock(dock: string): Promise<void> {
+  return invoke<void>('cmd_save_detail_dock', { dock });
+}
+
 export interface RawUiPrefs {
   theme: string;      // "" | "light" | "dark"
   accent: string;     // "" | "blue" | "violet" | "teal" | "rose"

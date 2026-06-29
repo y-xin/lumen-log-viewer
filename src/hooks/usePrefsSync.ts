@@ -5,10 +5,10 @@
 import { useEffect } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { loadUiPrefs, applyUiPrefs } from '../lib/uiPrefs';
-import { getFontSize } from '../api/commands';
+import { getFontSize, getDetailDock } from '../api/commands';
 import { useSession } from '../state/session';
 
-type PrefsKind = 'ui' | 'templates' | 'saved_filters' | 'recent_files' | 'column_prefs' | 'font_size' | 'ssh_hosts';
+type PrefsKind = 'ui' | 'templates' | 'saved_filters' | 'recent_files' | 'column_prefs' | 'font_size' | 'detail_dock' | 'ssh_hosts';
 
 export function usePrefsSync(): void {
   useEffect(() => {
@@ -22,6 +22,11 @@ export function usePrefsSync(): void {
           break;
         case 'font_size':
           getFontSize().then((n) => { if (typeof n === 'number') useSession.getState().setFontSize(n); });
+          break;
+        case 'detail_dock':
+          getDetailDock().then((d) => {
+            if (d === 'right' || d === 'bottom') useSession.getState().setDetailDock(d);
+          });
           break;
         case 'ssh_hosts': break; // lazy-load — Settings 远程 tab 打开时重读
         // saved_filters / recent_files / column_prefs: lazy-load 模式

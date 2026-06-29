@@ -560,6 +560,22 @@ pub fn cmd_save_font_size(
 }
 
 #[tauri::command]
+pub fn cmd_get_detail_dock(prefs_store: State<'_, PrefsStore>) -> Option<String> {
+    prefs_store.get_detail_dock()
+}
+
+#[tauri::command]
+pub fn cmd_save_detail_dock(
+    app: tauri::AppHandle,
+    prefs_store: State<'_, PrefsStore>,
+    dock: String,
+) -> Result<(), AppError> {
+    prefs_store.save_detail_dock(dock)?;
+    let _ = app.emit("lv:prefs-changed", "detail_dock");
+    Ok(())
+}
+
+#[tauri::command]
 pub fn cmd_get_ui_prefs(prefs_store: State<'_, PrefsStore>) -> UiPrefs {
     prefs_store.get_ui_prefs()
 }

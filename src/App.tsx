@@ -27,7 +27,7 @@ import { SniffQualityBanner } from './components/SniffQualityBanner';
 import { UpdateBanner } from './components/UpdateBanner';
 import { loadUiPrefs, applyUiPrefs, migrateLegacyLocalStorage, DEFAULT as UI_DEFAULT } from './lib/uiPrefs';
 import { useEffect as useEffectInit } from 'react';
-import { getFontSize, saveFontSize, openFile } from './api/commands';
+import { getFontSize, saveFontSize, openFile, getDetailDock } from './api/commands';
 
 // 启动时同步应用默认值（避免白屏闪）
 applyUiPrefs(UI_DEFAULT);
@@ -66,6 +66,15 @@ export default function App() {
       saveFontSize(fontSize).catch(() => {});
     }
   }, [fontSize]);
+
+  // 启动时拉详情面板停靠偏好（right / bottom）
+  const detailDock = useSession((s) => s.detailDock);
+  const setDetailDock = useSession((s) => s.setDetailDock);
+  useEffectInit(() => {
+    getDetailDock().then((d) => {
+      if (d === 'right' || d === 'bottom') setDetailDock(d);
+    }).catch(() => {});
+  }, [setDetailDock]);
 
   // 多窗口启动：从 URL ?path= 读取初始文件（cmd_open_in_new_window 创建新窗口时拼的 URL）
   useEffectInit(() => {
@@ -167,7 +176,15 @@ export default function App() {
       {metadata && <FilterBar />}
       {/* Raw 模式（sniff=NoMatch）下 StatsPanel 没意义（level 全 unknown / scope 空）— 直接隐藏 */}
       {metadata && metadata.sniff_kind !== 'NoMatch' && <StatsPanel />}
-      {metadata ? <LogList /> : (
+      {metadata ? (
+        // 列表 + 详情面板并排/上下排：面板挤压列表（不再浮层盖住）。
+        // 右停靠 → flex-row（列表变窄）；底停靠 → flex-col（列表变矮）。
+        // 面板未选中行时返回 null，列表自动占满。
+        <div className={`flex-1 min-h-0 flex ${detailDock === 'bottom' ? 'flex-col' : 'flex-row'}`}>
+          <LogList />
+          <DetailDrawer />
+        </div>
+      ) : (
         <main className="flex-1 flex items-center justify-center text-slate-400">
           {loading ? '加载中…' : '点击"打开日志文件"开始'}
         </main>
@@ -180,7 +197,6 @@ export default function App() {
           onOpenTemplateManager={() => setShowManager(true)}
         />
       )}
-      <DetailDrawer />
       <RotationDialog />
       <ShortcutsHelp />
       <GotoLineDialog />
